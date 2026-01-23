@@ -154,6 +154,7 @@ body {
 .header-links {
     margin-left: auto;
     display: flex;
+    align-items: center;
     gap: 4px;
 }
 
@@ -188,6 +189,13 @@ body {
 
 .header-link svg {
     display: block;
+}
+
+.github-star-frame {
+    margin-left: 10px;
+    margin-right: -28px;
+    display: flex;
+    align-self: center;
 }
 
 /* Tabs */
