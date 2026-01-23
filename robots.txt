@@ -1,0 +1,11 @@
+# robots.txt for json-viewer.ru
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://json-viewer.ru/sitemap.xml
+
+# Crawl-delay (optional, for politeness)
+Crawl-delay: 1
+
