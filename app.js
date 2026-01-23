@@ -45,6 +45,11 @@
         copyMsgpackBtn: document.getElementById('copy-msgpack'),
         downloadMsgpackBtn: document.getElementById('download-msgpack'),
         uploadMsgpackInput: document.getElementById('upload-msgpack'),
+        cborContent: document.getElementById('cbor-content'),
+        cborInfoContent: document.getElementById('cbor-info-content'),
+        copyCborBtn: document.getElementById('copy-cbor'),
+        downloadCborBtn: document.getElementById('download-cbor'),
+        uploadCborInput: document.getElementById('upload-cbor'),
         toast: document.getElementById('toast'),
         bookmarkBtn: document.getElementById('bookmark-btn'),
         aboutBtn: document.getElementById('about-btn'),
@@ -120,6 +125,16 @@
                 renderMsgpack(currentJson);
             } else {
                 showMsgpackEmpty();
+            }
+        }
+        
+        if (tabId === 'cbor') {
+            if (jsonError) {
+                showCborError(jsonError);
+            } else if (currentJson !== null) {
+                renderCbor(currentJson);
+            } else {
+                showCborEmpty();
             }
         }
     }
@@ -2385,6 +2400,402 @@
         event.target.value = '';
     }
 
+    // ============ CBOR Converter ============
+    let currentCborData = null;
+
+    function initCbor() {
+        elements.copyCborBtn.addEventListener('click', copyCborHex);
+        elements.downloadCborBtn.addEventListener('click', downloadCbor);
+        elements.uploadCborInput.addEventListener('change', uploadCbor);
+    }
+
+    function renderCbor(data) {
+        if (data === null || data === undefined) {
+            showCborEmpty();
+            return;
+        }
+
+        try {
+            currentCborData = encodeCbor(data);
+            const hexOutput = formatHexDump(currentCborData);
+            elements.cborContent.innerHTML = `<pre class="bson-hex">${hexOutput}</pre>`;
+            
+            renderCborStats(data);
+        } catch (e) {
+            showCborError('CBOR encoding error: ' + e.message);
+        }
+    }
+
+    function showCborError(error) {
+        elements.cborContent.innerHTML = `
+            <div class="empty-state error-state">
+                <span class="material-icons">error_outline</span>
+                <p>Invalid JSON</p>
+                <p class="error-message">${escapeHtml(error)}</p>
+            </div>`;
+        elements.cborInfoContent.innerHTML = `
+            <div class="empty-state">
+                <span class="material-icons">block</span>
+                <p>Fix JSON errors to generate CBOR</p>
+            </div>`;
+        currentCborData = null;
+    }
+
+    function showCborEmpty() {
+        elements.cborContent.innerHTML = `
+            <div class="empty-state">
+                <span class="material-icons">info_outline</span>
+                <p>Enter valid JSON in the editor to generate CBOR</p>
+            </div>`;
+        elements.cborInfoContent.innerHTML = `
+            <div class="empty-state">
+                <span class="material-icons">compare_arrows</span>
+                <p>Size statistics will appear here</p>
+            </div>`;
+        currentCborData = null;
+    }
+
+    // CBOR Encoder (RFC 8949)
+    function encodeCbor(value) {
+        function encode(val) {
+            const type = getType(val);
+            
+            switch (type) {
+                case 'null':
+                    return new Uint8Array([0xf6]); // simple value null
+                
+                case 'boolean':
+                    return new Uint8Array([val ? 0xf5 : 0xf4]); // true: 0xf5, false: 0xf4
+                
+                case 'number':
+                    if (Number.isInteger(val)) {
+                        if (val >= 0) {
+                            return encodeUnsigned(0, val); // major type 0
+                        } else {
+                            return encodeUnsigned(1, -1 - val); // major type 1 (negative)
+                        }
+                    } else {
+                        // Float64
+                        const buf = new ArrayBuffer(9);
+                        const view = new DataView(buf);
+                        view.setUint8(0, 0xfb); // float64 marker
+                        view.setFloat64(1, val, false); // big-endian
+                        return new Uint8Array(buf);
+                    }
+                
+                case 'string':
+                    const strBytes = new TextEncoder().encode(val);
+                    const strHeader = encodeUnsigned(3, strBytes.length); // major type 3
+                    const strResult = new Uint8Array(strHeader.length + strBytes.length);
+                    strResult.set(strHeader);
+                    strResult.set(strBytes, strHeader.length);
+                    return strResult;
+                
+                case 'array':
+                    const arrHeader = encodeUnsigned(4, val.length); // major type 4
+                    const arrParts = [arrHeader];
+                    for (const item of val) {
+                        arrParts.push(encode(item));
+                    }
+                    return concatArrays(arrParts);
+                
+                case 'object':
+                    const keys = Object.keys(val);
+                    const mapHeader = encodeUnsigned(5, keys.length); // major type 5
+                    const mapParts = [mapHeader];
+                    for (const key of keys) {
+                        mapParts.push(encode(key)); // key as string
+                        mapParts.push(encode(val[key])); // value
+                    }
+                    return concatArrays(mapParts);
+                
+                default:
+                    throw new Error('Unsupported type: ' + type);
+            }
+        }
+        
+        function encodeUnsigned(majorType, value) {
+            const mt = majorType << 5;
+            if (value < 24) {
+                return new Uint8Array([mt | value]);
+            } else if (value < 0x100) {
+                return new Uint8Array([mt | 24, value]);
+            } else if (value < 0x10000) {
+                return new Uint8Array([mt | 25, (value >> 8) & 0xff, value & 0xff]);
+            } else if (value < 0x100000000) {
+                return new Uint8Array([mt | 26, (value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff]);
+            } else {
+                // 64-bit
+                const buf = new Uint8Array(9);
+                buf[0] = mt | 27;
+                const high = Math.floor(value / 0x100000000);
+                const low = value >>> 0;
+                buf[1] = (high >> 24) & 0xff;
+                buf[2] = (high >> 16) & 0xff;
+                buf[3] = (high >> 8) & 0xff;
+                buf[4] = high & 0xff;
+                buf[5] = (low >> 24) & 0xff;
+                buf[6] = (low >> 16) & 0xff;
+                buf[7] = (low >> 8) & 0xff;
+                buf[8] = low & 0xff;
+                return buf;
+            }
+        }
+        
+        function concatArrays(arrays) {
+            const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
+            const result = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const arr of arrays) {
+                result.set(arr, offset);
+                offset += arr.length;
+            }
+            return result;
+        }
+        
+        return encode(value);
+    }
+
+    // CBOR Decoder
+    function decodeCbor(buffer) {
+        const data = new Uint8Array(buffer);
+        let offset = 0;
+        
+        function decode() {
+            if (offset >= data.length) throw new Error('Unexpected end of CBOR data');
+            
+            const initial = data[offset++];
+            const majorType = initial >> 5;
+            const additionalInfo = initial & 0x1f;
+            
+            let value = readLength(additionalInfo);
+            
+            switch (majorType) {
+                case 0: // unsigned integer
+                    return value;
+                
+                case 1: // negative integer
+                    return -1 - value;
+                
+                case 2: // byte string
+                    const bytes = data.slice(offset, offset + value);
+                    offset += value;
+                    return Array.from(bytes); // Return as array of numbers
+                
+                case 3: // text string
+                    const strBytes = data.slice(offset, offset + value);
+                    offset += value;
+                    return new TextDecoder().decode(strBytes);
+                
+                case 4: // array
+                    const arr = [];
+                    for (let i = 0; i < value; i++) {
+                        arr.push(decode());
+                    }
+                    return arr;
+                
+                case 5: // map
+                    const obj = {};
+                    for (let i = 0; i < value; i++) {
+                        const key = decode();
+                        obj[key] = decode();
+                    }
+                    return obj;
+                
+                case 6: // tagged item (ignore tag, return value)
+                    return decode();
+                
+                case 7: // simple/float
+                    if (additionalInfo === 20) return false;
+                    if (additionalInfo === 21) return true;
+                    if (additionalInfo === 22) return null;
+                    if (additionalInfo === 23) return undefined;
+                    if (additionalInfo === 25) {
+                        // float16 - simplified handling
+                        offset -= 1;
+                        const f16 = (data[offset] << 8) | data[offset + 1];
+                        offset += 2;
+                        return decodeFloat16(f16);
+                    }
+                    if (additionalInfo === 26) {
+                        // float32
+                        offset -= 4;
+                        const view = new DataView(data.buffer, offset, 4);
+                        offset += 4;
+                        return view.getFloat32(0, false);
+                    }
+                    if (additionalInfo === 27) {
+                        // float64
+                        const view = new DataView(data.buffer, offset - 8, 8);
+                        return view.getFloat64(0, false);
+                    }
+                    return null;
+                
+                default:
+                    throw new Error('Unknown CBOR major type: ' + majorType);
+            }
+        }
+        
+        function readLength(info) {
+            if (info < 24) return info;
+            if (info === 24) return data[offset++];
+            if (info === 25) {
+                const val = (data[offset] << 8) | data[offset + 1];
+                offset += 2;
+                return val;
+            }
+            if (info === 26) {
+                const val = (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3];
+                offset += 4;
+                return val >>> 0;
+            }
+            if (info === 27) {
+                const high = (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3];
+                const low = (data[offset + 4] << 24) | (data[offset + 5] << 16) | (data[offset + 6] << 8) | data[offset + 7];
+                offset += 8;
+                return (high >>> 0) * 0x100000000 + (low >>> 0);
+            }
+            throw new Error('Invalid CBOR additional info: ' + info);
+        }
+        
+        function decodeFloat16(value) {
+            const sign = (value >> 15) & 1;
+            const exp = (value >> 10) & 0x1f;
+            const mant = value & 0x3ff;
+            
+            let result;
+            if (exp === 0) {
+                result = mant * Math.pow(2, -24);
+            } else if (exp === 31) {
+                result = mant === 0 ? Infinity : NaN;
+            } else {
+                result = (mant + 1024) * Math.pow(2, exp - 25);
+            }
+            
+            return sign ? -result : result;
+        }
+        
+        return decode();
+    }
+
+    function renderCborStats(jsonData) {
+        const jsonStr = JSON.stringify(jsonData);
+        const jsonSize = new TextEncoder().encode(jsonStr).length;
+        const cborSize = currentCborData.length;
+        const diff = jsonSize - cborSize;
+        const diffPercent = ((diff / jsonSize) * 100).toFixed(1);
+        
+        const maxSize = Math.max(jsonSize, cborSize);
+        const jsonWidth = (jsonSize / maxSize * 100).toFixed(0);
+        const cborWidth = (cborSize / maxSize * 100).toFixed(0);
+        
+        let html = '<div class="size-comparison">';
+        
+        // JSON bar
+        html += `
+            <div class="size-bar-container">
+                <div class="size-bar-label">
+                    <span class="label">JSON</span>
+                    <span class="value">${formatBytes(jsonSize)}</span>
+                </div>
+                <div class="size-bar">
+                    <div class="size-bar-fill json" style="width: ${jsonWidth}%"></div>
+                </div>
+            </div>`;
+        
+        // CBOR bar
+        html += `
+            <div class="size-bar-container">
+                <div class="size-bar-label">
+                    <span class="label">CBOR</span>
+                    <span class="value">${formatBytes(cborSize)}</span>
+                </div>
+                <div class="size-bar">
+                    <div class="size-bar-fill cbor" style="width: ${cborWidth}%"></div>
+                </div>
+            </div>`;
+        
+        // Difference
+        html += `
+            <div class="size-diff">
+                <div class="diff-value ${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '-' : '+'}${formatBytes(Math.abs(diff))} (${Math.abs(diffPercent)}%)</div>
+                <div class="diff-label">${diff >= 0 ? 'Smaller' : 'Larger'} than JSON</div>
+            </div>`;
+        
+        html += '</div>';
+        
+        // Additional info
+        html += `
+            <div class="detail-section">
+                <div class="detail-label">Format Details</div>
+                <div class="detail-value" style="font-size: 10px;">
+                    CBOR (RFC 8949) is designed for small code size and small message size. Used in IoT, WebAuthn, and COSE.
+                </div>
+            </div>`;
+        
+        elements.cborInfoContent.innerHTML = html;
+    }
+
+    function copyCborHex() {
+        if (!currentCborData) {
+            showToast('No CBOR data to copy', 'error');
+            return;
+        }
+        
+        const hex = Array.from(currentCborData)
+            .map(b => b.toString(16).padStart(2, '0').toUpperCase())
+            .join(' ');
+        
+        navigator.clipboard.writeText(hex).then(() => {
+            showToast('CBOR hex copied to clipboard', 'success');
+        }).catch(() => {
+            showToast('Failed to copy', 'error');
+        });
+    }
+
+    function downloadCbor() {
+        if (!currentCborData) {
+            showToast('No CBOR data to download', 'error');
+            return;
+        }
+        
+        const blob = new Blob([currentCborData], { type: 'application/cbor' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'data.cbor';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('CBOR downloaded', 'success');
+    }
+
+    function uploadCbor(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const buffer = e.target.result;
+                const decoded = decodeCbor(buffer);
+                
+                // Update the JSON editor
+                elements.editor.value = JSON.stringify(decoded, null, 2);
+                handleEditorInput();
+                
+                // Switch to JSON tab
+                switchTab('json');
+                showToast('CBOR loaded successfully', 'success');
+            } catch (err) {
+                showToast('Failed to parse CBOR: ' + err.message, 'error');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        
+        // Reset input
+        event.target.value = '';
+    }
+
     // ============ Bookmark ============
     function initBookmark() {
         elements.bookmarkBtn.addEventListener('click', addBookmark);
@@ -2509,6 +2920,7 @@
         initSchema();
         initBson();
         initMsgpack();
+        initCbor();
         initBookmark();
         initAbout();
         initTheme();

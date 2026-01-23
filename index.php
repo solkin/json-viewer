@@ -154,6 +154,10 @@
                 <span class="material-icons">all_inbox</span>
                 MsgPack
             </button>
+            <button class="tab" data-tab="cbor">
+                <span class="material-icons">data_array</span>
+                CBOR
+            </button>
             <div class="tab-indicator"></div>
         </nav>
 
@@ -398,6 +402,51 @@
                                 <span class="material-icons">upload</span>
                                 Load MsgPack
                                 <input type="file" id="upload-msgpack" accept=".msgpack,.mp" hidden>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CBOR Tab -->
+            <section id="cbor-tab" class="tab-panel">
+                <div class="bson-container">
+                    <div class="bson-panel">
+                        <div class="panel-header">
+                            <span class="material-icons">data_array</span>
+                            <span>CBOR Hex</span>
+                            <div class="panel-actions">
+                                <button class="icon-btn" id="copy-cbor" title="Copy hex">
+                                    <span class="material-icons">content_copy</span>
+                                </button>
+                                <button class="icon-btn" id="download-cbor" title="Download CBOR">
+                                    <span class="material-icons">download</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="bson-content" id="cbor-content">
+                            <div class="empty-state">
+                                <span class="material-icons">info_outline</span>
+                                <p>Enter valid JSON in the editor to generate CBOR</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bson-info-panel">
+                        <div class="panel-header">
+                            <span class="material-icons">analytics</span>
+                            <span>Size Comparison</span>
+                        </div>
+                        <div class="bson-info-content" id="cbor-info-content">
+                            <div class="empty-state">
+                                <span class="material-icons">compare_arrows</span>
+                                <p>Size statistics will appear here</p>
+                            </div>
+                        </div>
+                        <div class="bson-actions">
+                            <label class="btn btn-secondary btn-upload">
+                                <span class="material-icons">upload</span>
+                                Load CBOR
+                                <input type="file" id="upload-cbor" accept=".cbor" hidden>
                             </label>
                         </div>
                     </div>

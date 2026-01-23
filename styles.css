@@ -1203,7 +1203,9 @@ body {
     background: var(--primary);
 }
 
-.size-bar-fill.bson {
+.size-bar-fill.bson,
+.size-bar-fill.msgpack,
+.size-bar-fill.cbor {
     background: var(--warning);
 }
 
