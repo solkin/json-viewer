@@ -198,6 +198,28 @@ body {
     padding: 0 14px;
     position: relative;
     flex-shrink: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--outline) transparent;
+}
+
+.tabs-container::-webkit-scrollbar {
+    height: 4px;
+}
+
+.tabs-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.tabs-container::-webkit-scrollbar-thumb {
+    background: var(--outline);
+    border-radius: 2px;
+}
+
+.tabs-container::-webkit-scrollbar-thumb:hover {
+    background: var(--outline-variant);
 }
 
 .tab {
@@ -216,6 +238,8 @@ body {
     position: relative;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .tab:hover {
