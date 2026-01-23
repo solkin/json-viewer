@@ -19,8 +19,8 @@
     
     <!-- SEO Meta Tags -->
     <title>JSON-Viewer.Ru — Free Online JSON Editor, Formatter, Validator & Converter</title>
-    <meta name="description" content="Free online JSON tool: edit JSON with syntax highlighting, format and minify, validate structure, view interactive tree, auto-generate JSON Schema, convert to BSON and MsgPack binary formats. Fast, lightweight, no registration required.">
-    <meta name="keywords" content="json viewer, json editor, json formatter, json minifier, json validator, json beautifier, json tree view, json schema generator, json to bson, json to msgpack, binary json, online json tool, free json editor, json parser, json structure viewer, json file editor">
+    <meta name="description" content="Free online JSON tool: edit JSON with syntax highlighting, format and minify, validate structure, view interactive tree, auto-generate JSON Schema, validate against schema, convert to BSON, MsgPack and CBOR binary formats. Fast, lightweight, no registration required.">
+    <meta name="keywords" content="json viewer, json editor, json formatter, json minifier, json validator, json beautifier, json tree view, json schema generator, json schema validator, json to bson, json to msgpack, json to cbor, binary json, online json tool, free json editor, json parser, json structure viewer, json file editor, cbor converter">
     <meta name="author" content="Igor Solkin">
     <link rel="canonical" href="https://json-viewer.ru/">
     
@@ -31,13 +31,13 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://json-viewer.ru/">
     <meta property="og:title" content="JSON-Viewer.Ru — Online JSON Editor & Converter">
-    <meta property="og:description" content="Edit, format, validate JSON. View tree structure, generate JSON Schema, convert to BSON/MsgPack. Free online tool for developers.">
+    <meta property="og:description" content="Edit, format, validate JSON. View tree structure, generate and validate JSON Schema, convert to BSON/MsgPack/CBOR. Free online tool for developers.">
     <meta property="og:site_name" content="JSON-Viewer.Ru">
     
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="JSON-Viewer.Ru — Online JSON Editor & Converter">
-    <meta name="twitter:description" content="Edit, format, validate JSON. View tree structure, generate JSON Schema, convert to BSON/MsgPack.">
+    <meta name="twitter:description" content="Edit, format, validate JSON. View tree structure, generate and validate JSON Schema, convert to BSON/MsgPack/CBOR.">
     
     <!-- Additional SEO -->
     <meta name="robots" content="index, follow">
@@ -51,7 +51,7 @@
         "@type": "WebApplication",
         "name": "JSON-Viewer.Ru",
         "url": "https://json-viewer.ru/",
-        "description": "Free online JSON editor with syntax highlighting, formatter, validator, tree viewer, JSON Schema generator, and BSON/MsgPack converter",
+        "description": "Free online JSON editor with syntax highlighting, formatter, validator, tree viewer, JSON Schema generator and validator, BSON/MsgPack/CBOR converter",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "Any",
         "offers": {
@@ -68,11 +68,13 @@
             "JSON syntax highlighting editor",
             "JSON formatting and beautification",
             "JSON minification",
-            "JSON validation",
+            "JSON validation with error highlighting",
             "Interactive JSON tree viewer",
             "JSON Schema auto-generation",
+            "JSON Schema validation",
             "JSON to BSON conversion",
             "JSON to MsgPack conversion",
+            "JSON to CBOR conversion",
             "File upload and download",
             "Copy to clipboard",
             "Light and dark theme with auto-detection",
