@@ -22,10 +22,17 @@
         detailsContent: document.getElementById('details-content'),
         expandAllBtn: document.getElementById('expand-all'),
         collapseAllBtn: document.getElementById('collapse-all'),
-        schemaContent: document.getElementById('schema-content'),
+        schemaEditor: document.getElementById('schema-editor'),
+        schemaEditorScroll: document.getElementById('schema-editor-scroll'),
+        schemaSyntaxHighlight: document.getElementById('schema-syntax-highlight'),
+        schemaLineNumbers: document.getElementById('schema-line-numbers'),
         schemaInfoContent: document.getElementById('schema-info-content'),
-        copySchemaBtn: document.getElementById('copy-schema'),
-        downloadSchemaBtn: document.getElementById('download-schema'),
+        validationContent: document.getElementById('validation-content'),
+        generateSchemaBtn: document.getElementById('generate-schema-btn'),
+        uploadSchemaInput: document.getElementById('upload-schema'),
+        validateBtn: document.getElementById('validate-btn'),
+        copySchemaBtn: document.getElementById('copy-schema-btn'),
+        downloadSchemaBtn: document.getElementById('download-schema-btn'),
         downloadJsonBtn: document.getElementById('download-json-btn'),
         uploadJsonInput: document.getElementById('upload-json'),
         bsonContent: document.getElementById('bson-content'),
@@ -137,30 +144,31 @@
     }
     
     function showSchemaError(error) {
-        elements.schemaContent.innerHTML = `
-            <div class="empty-state error-state">
-                <span class="material-icons">error_outline</span>
-                <p>Invalid JSON</p>
-                <p class="error-message">${escapeHtml(error)}</p>
-            </div>`;
+        elements.schemaEditor.placeholder = `Invalid JSON: ${error}\n\nFix JSON errors to generate schema, or paste your own schema here.`;
         elements.schemaInfoContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">block</span>
                 <p>Fix JSON errors to generate schema</p>
             </div>`;
+        elements.validationContent.innerHTML = `
+            <div class="validation-result invalid">
+                <span class="material-icons">error</span>
+                <span>Invalid JSON in editor</span>
+            </div>`;
         currentSchema = null;
     }
     
     function showSchemaEmpty() {
-        elements.schemaContent.innerHTML = `
-            <div class="empty-state">
-                <span class="material-icons">info_outline</span>
-                <p>Enter valid JSON in the editor to generate schema</p>
-            </div>`;
+        elements.schemaEditor.placeholder = 'Generate schema from JSON or paste your own...';
         elements.schemaInfoContent.innerHTML = `
             <div class="empty-state">
-                <span class="material-icons">analytics</span>
+                <span class="material-icons">info_outline</span>
                 <p>Schema statistics will appear here</p>
+            </div>`;
+        elements.validationContent.innerHTML = `
+            <div class="empty-state">
+                <span class="material-icons">pending</span>
+                <p>Click Validate to check JSON against schema</p>
             </div>`;
         currentSchema = null;
     }
@@ -804,30 +812,105 @@
         children.forEach(c => c.classList.add('collapsed'));
     }
 
-    // ============ Schema Generator ============
+    // ============ Schema Generator & Validator ============
     let currentSchema = null;
     let schemaStats = { types: {}, properties: 0, required: 0, depth: 0 };
 
     function initSchema() {
+        elements.generateSchemaBtn.addEventListener('click', () => {
+            if (currentJson !== null) {
+                generateAndDisplaySchema(currentJson);
+                showToast('Schema generated');
+            } else {
+                showToast('No valid JSON to generate schema from', 'error');
+            }
+        });
+        
+        elements.uploadSchemaInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    elements.schemaEditor.value = event.target.result;
+                    updateSchemaDisplay();
+                    updateSchemaStats();
+                    clearValidationResult();
+                    showToast('Schema loaded');
+                };
+                reader.readAsText(file);
+                e.target.value = '';
+            }
+        });
+        
+        elements.validateBtn.addEventListener('click', validateJsonAgainstSchema);
         elements.copySchemaBtn.addEventListener('click', copySchema);
         elements.downloadSchemaBtn.addEventListener('click', downloadSchema);
+        
+        // Schema editor input handling
+        elements.schemaEditor.addEventListener('input', () => {
+            updateSchemaDisplay();
+            debounce(() => updateSchemaStats(), 300)();
+        });
+        
+        // Sync scroll between textarea and syntax highlight
+        elements.schemaEditorScroll.addEventListener('scroll', () => {
+            const scrollTop = elements.schemaEditorScroll.scrollTop;
+            elements.schemaLineNumbers.scrollTop = scrollTop;
+        }, { passive: true });
+        
+        // Handle tab key in schema editor
+        elements.schemaEditor.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = elements.schemaEditor.selectionStart;
+                const end = elements.schemaEditor.selectionEnd;
+                elements.schemaEditor.value = elements.schemaEditor.value.substring(0, start) + '  ' + elements.schemaEditor.value.substring(end);
+                elements.schemaEditor.selectionStart = elements.schemaEditor.selectionEnd = start + 2;
+                updateSchemaDisplay();
+            }
+        });
+    }
+    
+    function updateSchemaDisplay() {
+        updateSchemaLineNumbers();
+        updateSchemaSyntaxHighlight();
+    }
+    
+    function updateSchemaLineNumbers() {
+        const lines = elements.schemaEditor.value.split('\n');
+        let html = '';
+        for (let i = 1; i <= lines.length; i++) {
+            html += `<span>${i}</span>`;
+        }
+        elements.schemaLineNumbers.innerHTML = html;
+    }
+    
+    function updateSchemaSyntaxHighlight() {
+        const code = elements.schemaEditor.value;
+        if (code.length > 500000) {
+            // Skip highlighting for very large content
+            elements.schemaSyntaxHighlight.textContent = code + '\n';
+            return;
+        }
+        elements.schemaSyntaxHighlight.innerHTML = highlightSyntax(code) + '\n';
     }
 
     function renderSchema(data) {
         if (data === null || data === undefined) {
-            elements.schemaContent.innerHTML = `
-                <div class="empty-state">
-                    <span class="material-icons">info_outline</span>
-                    <p>Enter valid JSON in the editor to generate schema</p>
-                </div>`;
+            elements.schemaEditor.value = '';
+            updateSchemaDisplay();
             elements.schemaInfoContent.innerHTML = `
                 <div class="empty-state">
-                    <span class="material-icons">analytics</span>
+                    <span class="material-icons">info_outline</span>
                     <p>Schema statistics will appear here</p>
                 </div>`;
             return;
         }
 
+        generateAndDisplaySchema(data);
+    }
+    
+    function generateAndDisplaySchema(data) {
         // Reset stats
         schemaStats = { types: {}, properties: 0, required: 0, depth: 0 };
         
@@ -835,12 +918,366 @@
         currentSchema = generateSchema(data, 0);
         currentSchema.$schema = 'https://json-schema.org/draft/2020-12/schema';
         
-        // Render schema with syntax highlighting
+        // Display in editor
         const schemaJson = JSON.stringify(currentSchema, null, 2);
-        elements.schemaContent.innerHTML = `<pre>${highlightSyntax(schemaJson)}</pre>`;
+        elements.schemaEditor.value = schemaJson;
+        
+        // Update syntax highlighting and line numbers
+        updateSchemaDisplay();
         
         // Render stats
         renderSchemaStats();
+        
+        // Clear previous validation result
+        clearValidationResult();
+    }
+    
+    function updateSchemaStats() {
+        const schemaText = elements.schemaEditor.value.trim();
+        if (!schemaText) {
+            elements.schemaInfoContent.innerHTML = `
+                <div class="empty-state">
+                    <span class="material-icons">info_outline</span>
+                    <p>Schema statistics will appear here</p>
+                </div>`;
+            return;
+        }
+        
+        try {
+            const schema = JSON.parse(schemaText);
+            schemaStats = { types: {}, properties: 0, required: 0, depth: 0 };
+            analyzeSchemaStats(schema, 0);
+            renderSchemaStats();
+        } catch (e) {
+            elements.schemaInfoContent.innerHTML = `
+                <div class="empty-state">
+                    <span class="material-icons">error_outline</span>
+                    <p>Invalid JSON in schema</p>
+                </div>`;
+        }
+    }
+    
+    function analyzeSchemaStats(schema, depth) {
+        if (!schema || typeof schema !== 'object') return;
+        
+        schemaStats.depth = Math.max(schemaStats.depth, depth);
+        
+        if (schema.type) {
+            schemaStats.types[schema.type] = (schemaStats.types[schema.type] || 0) + 1;
+        }
+        
+        if (schema.properties) {
+            const propKeys = Object.keys(schema.properties);
+            schemaStats.properties += propKeys.length;
+            propKeys.forEach(key => {
+                analyzeSchemaStats(schema.properties[key], depth + 1);
+            });
+        }
+        
+        if (schema.required && Array.isArray(schema.required)) {
+            schemaStats.required += schema.required.length;
+        }
+        
+        if (schema.items) {
+            analyzeSchemaStats(schema.items, depth + 1);
+        }
+        
+        if (schema.anyOf) {
+            schema.anyOf.forEach(s => analyzeSchemaStats(s, depth));
+        }
+        
+        if (schema.oneOf) {
+            schema.oneOf.forEach(s => analyzeSchemaStats(s, depth));
+        }
+        
+        if (schema.allOf) {
+            schema.allOf.forEach(s => analyzeSchemaStats(s, depth));
+        }
+    }
+    
+    function clearValidationResult() {
+        elements.validationContent.innerHTML = `
+            <div class="empty-state">
+                <span class="material-icons">pending</span>
+                <p>Click Validate to check JSON against schema</p>
+            </div>`;
+    }
+    
+    function validateJsonAgainstSchema() {
+        const schemaText = elements.schemaEditor.value.trim();
+        
+        if (!schemaText) {
+            showToast('No schema to validate against', 'error');
+            return;
+        }
+        
+        let schema;
+        try {
+            schema = JSON.parse(schemaText);
+        } catch (e) {
+            elements.validationContent.innerHTML = `
+                <div class="validation-result invalid">
+                    <span class="material-icons">error</span>
+                    <span>Invalid schema JSON: ${escapeHtml(e.message)}</span>
+                </div>`;
+            return;
+        }
+        
+        if (currentJson === null) {
+            elements.validationContent.innerHTML = `
+                <div class="validation-result invalid">
+                    <span class="material-icons">error</span>
+                    <span>No valid JSON data to validate</span>
+                </div>`;
+            return;
+        }
+        
+        // Perform validation
+        const errors = validateValue(currentJson, schema, '');
+        
+        if (errors.length === 0) {
+            elements.validationContent.innerHTML = `
+                <div class="validation-result valid">
+                    <span class="material-icons">check_circle</span>
+                    <span>JSON is valid against schema</span>
+                </div>`;
+            showToast('Validation passed');
+        } else {
+            let html = `
+                <div class="validation-result invalid">
+                    <span class="material-icons">cancel</span>
+                    <span>Validation failed (${errors.length} error${errors.length > 1 ? 's' : ''})</span>
+                </div>
+                <div class="validation-errors">`;
+            
+            errors.slice(0, 50).forEach(err => {
+                html += `
+                    <div class="validation-error-item">
+                        <span class="validation-error-path">${escapeHtml(err.path || '(root)')}</span>
+                        <span class="validation-error-message">${escapeHtml(err.message)}</span>
+                    </div>`;
+            });
+            
+            if (errors.length > 50) {
+                html += `<div class="validation-error-item">
+                    <span class="validation-error-message">...and ${errors.length - 50} more errors</span>
+                </div>`;
+            }
+            
+            html += '</div>';
+            elements.validationContent.innerHTML = html;
+            showToast(`Validation failed: ${errors.length} error(s)`, 'error');
+        }
+    }
+    
+    // Simple JSON Schema validator
+    function validateValue(value, schema, path) {
+        const errors = [];
+        
+        if (!schema || typeof schema !== 'object') {
+            return errors;
+        }
+        
+        // Handle anyOf
+        if (schema.anyOf) {
+            const anyOfErrors = [];
+            let valid = false;
+            for (const subSchema of schema.anyOf) {
+                const subErrors = validateValue(value, subSchema, path);
+                if (subErrors.length === 0) {
+                    valid = true;
+                    break;
+                }
+                anyOfErrors.push(...subErrors);
+            }
+            if (!valid) {
+                errors.push({ path, message: 'Does not match any of the allowed schemas' });
+            }
+            return errors;
+        }
+        
+        // Handle oneOf
+        if (schema.oneOf) {
+            let matchCount = 0;
+            for (const subSchema of schema.oneOf) {
+                const subErrors = validateValue(value, subSchema, path);
+                if (subErrors.length === 0) matchCount++;
+            }
+            if (matchCount !== 1) {
+                errors.push({ path, message: `Must match exactly one schema (matched ${matchCount})` });
+            }
+            return errors;
+        }
+        
+        // Handle allOf
+        if (schema.allOf) {
+            for (const subSchema of schema.allOf) {
+                errors.push(...validateValue(value, subSchema, path));
+            }
+            return errors;
+        }
+        
+        // Type validation
+        if (schema.type) {
+            const actualType = getJsonType(value);
+            const expectedTypes = Array.isArray(schema.type) ? schema.type : [schema.type];
+            
+            if (!expectedTypes.includes(actualType)) {
+                // Special case: integer is also a number
+                if (!(actualType === 'integer' && expectedTypes.includes('number'))) {
+                    errors.push({ path, message: `Expected ${expectedTypes.join(' or ')}, got ${actualType}` });
+                    return errors;
+                }
+            }
+        }
+        
+        // Enum validation
+        if (schema.enum) {
+            if (!schema.enum.some(e => JSON.stringify(e) === JSON.stringify(value))) {
+                errors.push({ path, message: `Value must be one of: ${JSON.stringify(schema.enum)}` });
+            }
+        }
+        
+        // Const validation
+        if (schema.const !== undefined) {
+            if (JSON.stringify(value) !== JSON.stringify(schema.const)) {
+                errors.push({ path, message: `Value must be ${JSON.stringify(schema.const)}` });
+            }
+        }
+        
+        // String validations
+        if (typeof value === 'string') {
+            if (schema.minLength !== undefined && value.length < schema.minLength) {
+                errors.push({ path, message: `String length must be >= ${schema.minLength}` });
+            }
+            if (schema.maxLength !== undefined && value.length > schema.maxLength) {
+                errors.push({ path, message: `String length must be <= ${schema.maxLength}` });
+            }
+            if (schema.pattern) {
+                try {
+                    const regex = new RegExp(schema.pattern);
+                    if (!regex.test(value)) {
+                        errors.push({ path, message: `String must match pattern: ${schema.pattern}` });
+                    }
+                } catch (e) {
+                    // Invalid regex in schema
+                }
+            }
+        }
+        
+        // Number validations
+        if (typeof value === 'number') {
+            if (schema.minimum !== undefined && value < schema.minimum) {
+                errors.push({ path, message: `Value must be >= ${schema.minimum}` });
+            }
+            if (schema.maximum !== undefined && value > schema.maximum) {
+                errors.push({ path, message: `Value must be <= ${schema.maximum}` });
+            }
+            if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) {
+                errors.push({ path, message: `Value must be > ${schema.exclusiveMinimum}` });
+            }
+            if (schema.exclusiveMaximum !== undefined && value >= schema.exclusiveMaximum) {
+                errors.push({ path, message: `Value must be < ${schema.exclusiveMaximum}` });
+            }
+            if (schema.multipleOf !== undefined && value % schema.multipleOf !== 0) {
+                errors.push({ path, message: `Value must be multiple of ${schema.multipleOf}` });
+            }
+        }
+        
+        // Array validations
+        if (Array.isArray(value)) {
+            if (schema.minItems !== undefined && value.length < schema.minItems) {
+                errors.push({ path, message: `Array must have >= ${schema.minItems} items` });
+            }
+            if (schema.maxItems !== undefined && value.length > schema.maxItems) {
+                errors.push({ path, message: `Array must have <= ${schema.maxItems} items` });
+            }
+            if (schema.uniqueItems && new Set(value.map(JSON.stringify)).size !== value.length) {
+                errors.push({ path, message: 'Array items must be unique' });
+            }
+            
+            // Validate items
+            if (schema.items) {
+                value.forEach((item, index) => {
+                    const itemPath = path ? `${path}[${index}]` : `[${index}]`;
+                    errors.push(...validateValue(item, schema.items, itemPath));
+                });
+            }
+        }
+        
+        // Object validations
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+            const keys = Object.keys(value);
+            
+            // Required properties
+            if (schema.required) {
+                for (const req of schema.required) {
+                    if (!(req in value)) {
+                        errors.push({ path, message: `Missing required property: ${req}` });
+                    }
+                }
+            }
+            
+            // Property count
+            if (schema.minProperties !== undefined && keys.length < schema.minProperties) {
+                errors.push({ path, message: `Object must have >= ${schema.minProperties} properties` });
+            }
+            if (schema.maxProperties !== undefined && keys.length > schema.maxProperties) {
+                errors.push({ path, message: `Object must have <= ${schema.maxProperties} properties` });
+            }
+            
+            // Validate properties
+            if (schema.properties) {
+                for (const key of keys) {
+                    if (schema.properties[key]) {
+                        const propPath = path ? `${path}.${key}` : key;
+                        errors.push(...validateValue(value[key], schema.properties[key], propPath));
+                    }
+                }
+            }
+            
+            // Additional properties
+            if (schema.additionalProperties === false) {
+                const allowedKeys = Object.keys(schema.properties || {});
+                const patternKeys = schema.patternProperties ? Object.keys(schema.patternProperties) : [];
+                
+                for (const key of keys) {
+                    if (!allowedKeys.includes(key)) {
+                        let matchesPattern = false;
+                        for (const pattern of patternKeys) {
+                            try {
+                                if (new RegExp(pattern).test(key)) {
+                                    matchesPattern = true;
+                                    break;
+                                }
+                            } catch (e) {}
+                        }
+                        if (!matchesPattern) {
+                            errors.push({ path, message: `Additional property not allowed: ${key}` });
+                        }
+                    }
+                }
+            }
+        }
+        
+        return errors;
+    }
+    
+    function getJsonType(value) {
+        if (value === null) return 'null';
+        if (Array.isArray(value)) return 'array';
+        if (typeof value === 'number') {
+            return Number.isInteger(value) ? 'integer' : 'number';
+        }
+        return typeof value;
+    }
+    
+    function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
     }
 
     function generateSchema(value, depth) {
@@ -1021,12 +1458,13 @@
     }
 
     function copySchema() {
-        if (!currentSchema) {
+        const schemaText = elements.schemaEditor.value.trim();
+        if (!schemaText) {
             showToast('No schema to copy', 'error');
             return;
         }
         
-        navigator.clipboard.writeText(JSON.stringify(currentSchema, null, 2)).then(() => {
+        navigator.clipboard.writeText(schemaText).then(() => {
             showToast('Schema copied to clipboard', 'success');
         }).catch(() => {
             showToast('Failed to copy', 'error');
@@ -1034,12 +1472,13 @@
     }
 
     function downloadSchema() {
-        if (!currentSchema) {
+        const schemaText = elements.schemaEditor.value.trim();
+        if (!schemaText) {
             showToast('No schema to download', 'error');
             return;
         }
         
-        const blob = new Blob([JSON.stringify(currentSchema, null, 2)], { type: 'application/json' });
+        const blob = new Blob([schemaText], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;

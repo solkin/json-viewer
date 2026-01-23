@@ -251,30 +251,62 @@
                             <span class="material-icons">schema</span>
                             <span>JSON Schema</span>
                             <div class="panel-actions">
-                                <button class="icon-btn" id="copy-schema" title="Copy schema">
+                                <button class="icon-btn" id="generate-schema-btn" title="Generate from JSON">
+                                    <span class="material-icons">auto_fix_high</span>
+                                </button>
+                                <label class="icon-btn" title="Load schema file">
+                                    <span class="material-icons">upload</span>
+                                    <input type="file" id="upload-schema" accept=".json" hidden>
+                                </label>
+                                <button class="icon-btn" id="copy-schema-btn" title="Copy schema">
                                     <span class="material-icons">content_copy</span>
                                 </button>
-                                <button class="icon-btn" id="download-schema" title="Download schema">
+                                <button class="icon-btn" id="download-schema-btn" title="Download schema">
                                     <span class="material-icons">download</span>
                                 </button>
                             </div>
                         </div>
-                        <div class="schema-content" id="schema-content">
-                            <div class="empty-state">
-                                <span class="material-icons">info_outline</span>
-                                <p>Enter valid JSON in the editor to generate schema</p>
+                        <div class="editor-container">
+                            <div class="line-numbers" id="schema-line-numbers"></div>
+                            <div class="editor-wrapper">
+                                <div class="editor-scroll-container" id="schema-editor-scroll">
+                                    <div class="editor-content">
+                                        <pre class="syntax-highlight" id="schema-syntax-highlight"></pre>
+                                        <textarea id="schema-editor" spellcheck="false" placeholder="Generate schema from JSON or paste your own..."></textarea>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="schema-info-panel">
-                        <div class="panel-header">
-                            <span class="material-icons">info</span>
-                            <span>Schema Info</span>
+                    <div class="schema-sidebar">
+                        <div class="schema-info-panel">
+                            <div class="panel-header">
+                                <span class="material-icons">fact_check</span>
+                                <span>Validation</span>
+                                <div class="panel-actions">
+                                    <button class="btn btn-primary btn-sm" id="validate-btn" title="Validate JSON against schema">
+                                        <span class="material-icons">play_arrow</span>
+                                        Validate
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="validation-content" id="validation-content">
+                                <div class="empty-state">
+                                    <span class="material-icons">pending</span>
+                                    <p>Click Validate to check JSON</p>
+                                </div>
+                            </div>
                         </div>
-                        <div class="schema-info-content" id="schema-info-content">
-                            <div class="empty-state">
+                        <div class="schema-info-panel">
+                            <div class="panel-header">
                                 <span class="material-icons">analytics</span>
-                                <p>Schema statistics will appear here</p>
+                                <span>Statistics</span>
+                            </div>
+                            <div class="schema-info-content" id="schema-info-content">
+                                <div class="empty-state">
+                                    <span class="material-icons">info_outline</span>
+                                    <p>Schema statistics will appear here</p>
+                                </div>
                             </div>
                         </div>
                     </div>
