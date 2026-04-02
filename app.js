@@ -50,6 +50,24 @@
         copyCborBtn: document.getElementById('copy-cbor'),
         downloadCborBtn: document.getElementById('download-cbor'),
         uploadCborInput: document.getElementById('upload-cbor'),
+        compareRunBtn: document.getElementById('compare-run-btn'),
+        compareSwapBtn: document.getElementById('compare-swap-btn'),
+        compareFromEditorA: document.getElementById('compare-from-editor-a-btn'),
+        compareFromEditorB: document.getElementById('compare-from-editor-b-btn'),
+        compareCopyReportBtn: document.getElementById('compare-copy-report-btn'),
+        compareJsonA: document.getElementById('compare-json-a'),
+        compareJsonB: document.getElementById('compare-json-b'),
+        compareLineNumbersA: document.getElementById('compare-a-line-numbers'),
+        compareLineNumbersB: document.getElementById('compare-b-line-numbers'),
+        compareScrollA: document.getElementById('compare-a-scroll'),
+        compareScrollB: document.getElementById('compare-b-scroll'),
+        compareSyntaxA: document.getElementById('compare-a-syntax'),
+        compareSyntaxB: document.getElementById('compare-b-syntax'),
+        compareErrorA: document.getElementById('compare-error-a'),
+        compareErrorB: document.getElementById('compare-error-b'),
+        compareResultsContent: document.getElementById('compare-results-content'),
+        uploadCompareA: document.getElementById('upload-compare-a'),
+        uploadCompareB: document.getElementById('upload-compare-b'),
         toast: document.getElementById('toast'),
         bookmarkBtn: document.getElementById('bookmark-btn'),
         aboutBtn: document.getElementById('about-btn'),
@@ -70,6 +88,11 @@
     // LocalStorage keys
     const STORAGE_KEY = 'json-viewer-content';
     const THEME_KEY = 'json-viewer-theme';
+    const COMPARE_MAX_DIFFS = 500;
+
+    let lastCompareReportText = '';
+    let compareErrorLineA = null;
+    let compareErrorLineB = null;
 
     // ============ Tab Navigation ============
     function initTabs() {
@@ -292,6 +315,53 @@
         }
     }
 
+    function scrollToCaretCompare(side) {
+        const editor = side === 'a' ? elements.compareJsonA : elements.compareJsonB;
+        const scroll = side === 'a' ? elements.compareScrollA : elements.compareScrollB;
+        const pos = editor.selectionStart;
+        const textBeforeCaret = editor.value.substring(0, pos);
+        const lines = textBeforeCaret.split('\n');
+        const lineNum = lines.length;
+        const colNum = lines[lines.length - 1].length;
+        const lineHeight = 12 * 1.5;
+        const charWidth = 7.2;
+        const padding = 8;
+        const caretTop = (lineNum - 1) * lineHeight + padding;
+        const caretLeft = colNum * charWidth + padding;
+        const viewTop = scroll.scrollTop;
+        const viewBottom = viewTop + scroll.clientHeight;
+        const viewLeft = scroll.scrollLeft;
+        const viewRight = viewLeft + scroll.clientWidth;
+        if (caretTop < viewTop + padding) {
+            scroll.scrollTop = caretTop - padding;
+        } else if (caretTop + lineHeight > viewBottom - padding) {
+            scroll.scrollTop = caretTop + lineHeight - scroll.clientHeight + padding;
+        }
+        if (caretLeft < viewLeft + padding) {
+            scroll.scrollLeft = caretLeft - padding;
+        } else if (caretLeft > viewRight - padding * 2) {
+            scroll.scrollLeft = caretLeft - scroll.clientWidth + padding * 2;
+        }
+    }
+
+    function refreshCompareEditor(side) {
+        if (side === 'a') {
+            updateLineNumbersFor(elements.compareJsonA, elements.compareLineNumbersA, compareErrorLineA);
+            updateSyntaxHighlightFor(elements.compareJsonA, elements.compareSyntaxA, compareErrorLineA);
+        } else {
+            updateLineNumbersFor(elements.compareJsonB, elements.compareLineNumbersB, compareErrorLineB);
+            updateSyntaxHighlightFor(elements.compareJsonB, elements.compareSyntaxB, compareErrorLineB);
+        }
+    }
+
+    function syncCompareLineNumbers(side) {
+        if (side === 'a') {
+            elements.compareLineNumbersA.scrollTop = elements.compareScrollA.scrollTop;
+        } else {
+            elements.compareLineNumbersB.scrollTop = elements.compareScrollB.scrollTop;
+        }
+    }
+
     function handleKeyDown(e) {
         // Tab key handling
         if (e.key === 'Tab') {
@@ -311,39 +381,11 @@
     }
 
     function updateLineNumbers() {
-        const lines = elements.editor.value.split('\n');
-        const count = lines.length;
-        let html = '';
-        for (let i = 1; i <= count; i++) {
-            if (errorLine === i) {
-                html += `<span class="error">${i}</span>`;
-            } else {
-                html += `<span>${i}</span>`;
-            }
-        }
-        elements.lineNumbers.innerHTML = html;
+        updateLineNumbersFor(elements.editor, elements.lineNumbers, errorLine);
     }
 
     function updateSyntaxHighlight() {
-        const code = elements.editor.value;
-        // Skip highlighting for very large content (>2MB) for performance
-        if (code.length > 2000000) {
-            elements.syntaxHighlight.textContent = code + '\n';
-            return;
-        }
-        
-        let html = highlightSyntax(code);
-        
-        // Add error line highlighting if there's an error
-        if (errorLine !== null) {
-            const lines = html.split('\n');
-            if (errorLine >= 1 && errorLine <= lines.length) {
-                lines[errorLine - 1] = `<span class="error-line">${lines[errorLine - 1]}</span>`;
-                html = lines.join('\n');
-            }
-        }
-        
-        elements.syntaxHighlight.innerHTML = html + '\n';
+        updateSyntaxHighlightFor(elements.editor, elements.syntaxHighlight, errorLine);
     }
 
     function highlightSyntax(code) {
@@ -377,6 +419,37 @@
             '<span class="key">$1</span>:');
 
         return escaped;
+    }
+
+    function updateLineNumbersFor(textareaEl, lineNumbersEl, errorLineNum) {
+        const lines = textareaEl.value.split('\n');
+        const count = lines.length;
+        let html = '';
+        for (let i = 1; i <= count; i++) {
+            if (errorLineNum === i) {
+                html += `<span class="error">${i}</span>`;
+            } else {
+                html += `<span>${i}</span>`;
+            }
+        }
+        lineNumbersEl.innerHTML = html;
+    }
+
+    function updateSyntaxHighlightFor(textareaEl, syntaxEl, errorLineNum) {
+        const code = textareaEl.value;
+        if (code.length > 2000000) {
+            syntaxEl.textContent = code + '\n';
+            return;
+        }
+        let html = highlightSyntax(code);
+        if (errorLineNum !== null) {
+            const lines = html.split('\n');
+            if (errorLineNum >= 1 && errorLineNum <= lines.length) {
+                lines[errorLineNum - 1] = `<span class="error-line">${lines[errorLineNum - 1]}</span>`;
+                html = lines.join('\n');
+            }
+        }
+        syntaxEl.innerHTML = html + '\n';
     }
 
     function validateJson() {
@@ -2796,6 +2869,485 @@
         event.target.value = '';
     }
 
+    // ============ JSON Compare (semantic diff) ============
+    function initCompare() {
+        elements.compareRunBtn.addEventListener('click', runCompare);
+        elements.compareSwapBtn.addEventListener('click', swapComparePanels);
+        elements.compareFromEditorA.addEventListener('click', () => {
+            elements.compareJsonA.value = elements.editor.value;
+            hideCompareParseError('a');
+            hideCompareParseError('b');
+        });
+        elements.compareFromEditorB.addEventListener('click', () => {
+            elements.compareJsonB.value = elements.editor.value;
+            hideCompareParseError('a');
+            hideCompareParseError('b');
+        });
+        elements.compareCopyReportBtn.addEventListener('click', copyCompareReport);
+        elements.uploadCompareA.addEventListener('change', (e) => uploadCompareFile(e, 'a'));
+        elements.uploadCompareB.addEventListener('change', (e) => uploadCompareFile(e, 'b'));
+
+        function onCompareInput(side) {
+            if (side === 'a') {
+                compareErrorLineA = null;
+                elements.compareErrorA.hidden = true;
+                elements.compareErrorA.textContent = '';
+            } else {
+                compareErrorLineB = null;
+                elements.compareErrorB.hidden = true;
+                elements.compareErrorB.textContent = '';
+            }
+            refreshCompareEditor(side);
+            scrollToCaretCompare(side);
+        }
+        elements.compareJsonA.addEventListener('input', () => onCompareInput('a'));
+        elements.compareJsonB.addEventListener('input', () => onCompareInput('b'));
+        elements.compareJsonA.addEventListener('keydown', handleCompareKeyDown);
+        elements.compareJsonB.addEventListener('keydown', handleCompareKeyDown);
+        elements.compareJsonA.addEventListener('click', () => scrollToCaretCompare('a'));
+        elements.compareJsonA.addEventListener('keyup', () => scrollToCaretCompare('a'));
+        elements.compareJsonB.addEventListener('click', () => scrollToCaretCompare('b'));
+        elements.compareJsonB.addEventListener('keyup', () => scrollToCaretCompare('b'));
+
+        elements.compareScrollA.addEventListener('scroll', () => syncCompareLineNumbers('a'), { passive: true });
+        elements.compareScrollB.addEventListener('scroll', () => syncCompareLineNumbers('b'), { passive: true });
+        elements.compareScrollA.addEventListener('click', () => elements.compareJsonA.focus());
+        elements.compareScrollB.addEventListener('click', () => elements.compareJsonB.focus());
+
+        refreshCompareEditor('a');
+        refreshCompareEditor('b');
+    }
+
+    function handleCompareKeyDown(e) {
+        if (e.key !== 'Tab') {
+            return;
+        }
+        e.preventDefault();
+        const ta = e.target;
+        const side = ta === elements.compareJsonA ? 'a' : 'b';
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const value = ta.value;
+        ta.value = value.substring(0, start) + '  ' + value.substring(end);
+        ta.selectionStart = ta.selectionEnd = start + 2;
+        if (side === 'a') {
+            compareErrorLineA = null;
+            elements.compareErrorA.hidden = true;
+            elements.compareErrorA.textContent = '';
+        } else {
+            compareErrorLineB = null;
+            elements.compareErrorB.hidden = true;
+            elements.compareErrorB.textContent = '';
+        }
+        refreshCompareEditor(side);
+    }
+
+    function hideCompareParseError(side) {
+        const el = side === 'a' ? elements.compareErrorA : elements.compareErrorB;
+        el.hidden = true;
+        el.textContent = '';
+        if (side === 'a') {
+            compareErrorLineA = null;
+        } else {
+            compareErrorLineB = null;
+        }
+        refreshCompareEditor(side);
+    }
+
+    function showCompareParseError(side, message) {
+        const el = side === 'a' ? elements.compareErrorA : elements.compareErrorB;
+        el.hidden = false;
+        el.textContent = message;
+    }
+
+    function swapComparePanels() {
+        const a = elements.compareJsonA.value;
+        elements.compareJsonA.value = elements.compareJsonB.value;
+        elements.compareJsonB.value = a;
+        const errA = elements.compareErrorA.textContent;
+        const errB = elements.compareErrorB.textContent;
+        const hiddenA = elements.compareErrorA.hidden;
+        const hiddenB = elements.compareErrorB.hidden;
+        elements.compareErrorA.textContent = errB;
+        elements.compareErrorB.textContent = errA;
+        elements.compareErrorA.hidden = hiddenB;
+        elements.compareErrorB.hidden = hiddenA;
+        const lineA = compareErrorLineA;
+        compareErrorLineA = compareErrorLineB;
+        compareErrorLineB = lineA;
+        refreshCompareEditor('a');
+        refreshCompareEditor('b');
+    }
+
+    function uploadCompareFile(event, side) {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target.result;
+            if (side === 'a') {
+                elements.compareJsonA.value = text;
+                hideCompareParseError('a');
+            } else {
+                elements.compareJsonB.value = text;
+                hideCompareParseError('b');
+            }
+            refreshCompareEditor(side);
+            showToast('File loaded into ' + (side === 'a' ? 'A' : 'B'), 'success');
+        };
+        reader.onerror = () => showToast('Failed to read file', 'error');
+        reader.readAsText(file);
+        event.target.value = '';
+    }
+
+    function parseCompareJson(text, side) {
+        try {
+            const data = JSON.parse(text);
+            hideCompareParseError(side);
+            return { ok: true, data };
+        } catch (err) {
+            const msg = err.message || 'Invalid JSON';
+            showCompareParseError(side, msg);
+            const line = getErrorLine(msg, text);
+            if (side === 'a') {
+                compareErrorLineA = line;
+            } else {
+                compareErrorLineB = line;
+            }
+            refreshCompareEditor(side);
+            return { ok: false, data: null };
+        }
+    }
+
+    function jsonValueType(value) {
+        if (value === null) {
+            return 'null';
+        }
+        if (Array.isArray(value)) {
+            return 'array';
+        }
+        return typeof value;
+    }
+
+    function formatJsonPath(parts) {
+        if (!parts.length) {
+            return '$';
+        }
+        let s = '$';
+        for (let i = 0; i < parts.length; i++) {
+            const p = parts[i];
+            if (typeof p === 'number') {
+                s += '[' + p + ']';
+            } else if (/^[a-zA-Z_$][\w$]*$/.test(p)) {
+                s += '.' + p;
+            } else {
+                s += '[' + JSON.stringify(p) + ']';
+            }
+        }
+        return s;
+    }
+
+    function sameJsonPrimitive(a, b) {
+        return Object.is(a, b);
+    }
+
+    function previewJsonValue(value) {
+        let s;
+        try {
+            s = JSON.stringify(value);
+        } catch (e) {
+            s = String(value);
+        }
+        if (s.length > 240) {
+            return s.slice(0, 237) + '...';
+        }
+        return s;
+    }
+
+    function compareJsonValues(a, b, pathParts, out) {
+        if (out.length >= COMPARE_MAX_DIFFS) {
+            return;
+        }
+        const ta = jsonValueType(a);
+        const tb = jsonValueType(b);
+        if (ta !== tb) {
+            out.push({
+                kind: 'type',
+                path: formatJsonPath(pathParts),
+                leftType: ta,
+                rightType: tb,
+                leftVal: a,
+                rightVal: b
+            });
+            return;
+        }
+        if (ta === 'null') {
+            return;
+        }
+        if (ta === 'number' || ta === 'boolean' || ta === 'string') {
+            if (!sameJsonPrimitive(a, b)) {
+                out.push({
+                    kind: 'value',
+                    path: formatJsonPath(pathParts),
+                    leftVal: a,
+                    rightVal: b
+                });
+            }
+            return;
+        }
+        if (ta === 'array') {
+            if (a.length !== b.length) {
+                out.push({
+                    kind: 'length',
+                    path: formatJsonPath(pathParts),
+                    left: a.length,
+                    right: b.length
+                });
+            }
+            const n = Math.min(a.length, b.length);
+            for (let i = 0; i < n; i++) {
+                compareJsonValues(a[i], b[i], pathParts.concat(i), out);
+                if (out.length >= COMPARE_MAX_DIFFS) {
+                    return;
+                }
+            }
+            for (let i = n; i < a.length; i++) {
+                if (out.length >= COMPARE_MAX_DIFFS) {
+                    return;
+                }
+                out.push({
+                    kind: 'only_left',
+                    path: formatJsonPath(pathParts.concat(i)),
+                    leftVal: a[i]
+                });
+            }
+            for (let i = n; i < b.length; i++) {
+                if (out.length >= COMPARE_MAX_DIFFS) {
+                    return;
+                }
+                out.push({
+                    kind: 'only_right',
+                    path: formatJsonPath(pathParts.concat(i)),
+                    rightVal: b[i]
+                });
+            }
+            return;
+        }
+        // object
+        const keysA = Object.keys(a);
+        const keysB = Object.keys(b);
+        const setB = new Set(keysB);
+        const setA = new Set(keysA);
+        for (let i = 0; i < keysA.length; i++) {
+            const k = keysA[i];
+            if (!setB.has(k)) {
+                if (out.length >= COMPARE_MAX_DIFFS) {
+                    return;
+                }
+                out.push({
+                    kind: 'only_left',
+                    path: formatJsonPath(pathParts.concat(k)),
+                    leftVal: a[k]
+                });
+            }
+        }
+        for (let i = 0; i < keysB.length; i++) {
+            const k = keysB[i];
+            if (!setA.has(k)) {
+                if (out.length >= COMPARE_MAX_DIFFS) {
+                    return;
+                }
+                out.push({
+                    kind: 'only_right',
+                    path: formatJsonPath(pathParts.concat(k)),
+                    rightVal: b[k]
+                });
+            }
+        }
+        const common = keysA.filter((k) => setB.has(k));
+        common.sort();
+        for (let i = 0; i < common.length; i++) {
+            const k = common[i];
+            compareJsonValues(a[k], b[k], pathParts.concat(k), out);
+            if (out.length >= COMPARE_MAX_DIFFS) {
+                return;
+            }
+        }
+    }
+
+    function diffKindLabel(kind) {
+        switch (kind) {
+            case 'value':
+                return 'Value differs';
+            case 'type':
+                return 'Type mismatch';
+            case 'length':
+                return 'Array length differs';
+            case 'only_left':
+                return 'Only in JSON A';
+            case 'only_right':
+                return 'Only in JSON B';
+            default:
+                return kind;
+        }
+    }
+
+    function renderCompareDiffItem(d) {
+        const label = diffKindLabel(d.kind);
+        let meta = '';
+        let valuesHtml = '';
+        if (d.kind === 'type') {
+            meta = escapeHtml(d.leftType) + ' vs ' + escapeHtml(d.rightType);
+            valuesHtml = `
+                <div class="compare-diff-values">
+                    <div>
+                        <div class="compare-diff-side-label">JSON A</div>
+                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.leftVal))}</div>
+                    </div>
+                    <div>
+                        <div class="compare-diff-side-label">JSON B</div>
+                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.rightVal))}</div>
+                    </div>
+                </div>`;
+        } else if (d.kind === 'value') {
+            valuesHtml = `
+                <div class="compare-diff-values">
+                    <div>
+                        <div class="compare-diff-side-label">JSON A</div>
+                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.leftVal))}</div>
+                    </div>
+                    <div>
+                        <div class="compare-diff-side-label">JSON B</div>
+                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.rightVal))}</div>
+                    </div>
+                </div>`;
+        } else if (d.kind === 'length') {
+            meta = 'length ' + d.left + ' vs ' + d.right;
+        } else if (d.kind === 'only_left') {
+            valuesHtml = `
+                <div class="compare-diff-values">
+                    <div>
+                        <div class="compare-diff-side-label">JSON A</div>
+                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.leftVal))}</div>
+                    </div>
+                </div>`;
+        } else if (d.kind === 'only_right') {
+            valuesHtml = `
+                <div class="compare-diff-values">
+                    <div>
+                        <div class="compare-diff-side-label">JSON B</div>
+                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.rightVal))}</div>
+                    </div>
+                </div>`;
+        }
+        return `
+            <li class="compare-diff-item kind-${escapeHtml(d.kind)}">
+                <div class="compare-diff-path">${escapeHtml(d.path)}</div>
+                <div class="compare-diff-meta">${escapeHtml(label)}${meta ? ' · ' + meta : ''}</div>
+                ${valuesHtml}
+            </li>`;
+    }
+
+    function buildCompareReport(diffs, truncated) {
+        const lines = ['JSON semantic comparison', 'Semantically equal: ' + (diffs.length === 0 ? 'yes' : 'no')];
+        if (diffs.length) {
+            lines.push('Differences (' + diffs.length + (truncated ? '+' : '') + '):');
+            for (let i = 0; i < diffs.length; i++) {
+                const d = diffs[i];
+                lines.push('');
+                lines.push((i + 1) + '. ' + d.path + ' — ' + diffKindLabel(d.kind));
+                if (d.kind === 'type') {
+                    lines.push('   Types: ' + d.leftType + ' vs ' + d.rightType);
+                    lines.push('   A: ' + previewJsonValue(d.leftVal));
+                    lines.push('   B: ' + previewJsonValue(d.rightVal));
+                } else if (d.kind === 'value') {
+                    lines.push('   A: ' + previewJsonValue(d.leftVal));
+                    lines.push('   B: ' + previewJsonValue(d.rightVal));
+                } else if (d.kind === 'length') {
+                    lines.push('   Lengths: ' + d.left + ' vs ' + d.right);
+                } else if (d.kind === 'only_left') {
+                    lines.push('   A: ' + previewJsonValue(d.leftVal));
+                } else if (d.kind === 'only_right') {
+                    lines.push('   B: ' + previewJsonValue(d.rightVal));
+                }
+            }
+        }
+        if (truncated) {
+            lines.push('');
+            lines.push('(List truncated at ' + COMPARE_MAX_DIFFS + ' differences.)');
+        }
+        return lines.join('\n');
+    }
+
+    function runCompare() {
+        hideCompareParseError('a');
+        hideCompareParseError('b');
+        const textA = elements.compareJsonA.value.trim();
+        const textB = elements.compareJsonB.value.trim();
+        if (!textA && !textB) {
+            elements.compareResultsContent.innerHTML = `
+                <div class="empty-state">
+                    <span class="material-icons">info_outline</span>
+                    <p>Paste JSON in both panels or load files</p>
+                </div>`;
+            lastCompareReportText = '';
+            return;
+        }
+        const pa = parseCompareJson(textA, 'a');
+        const pb = parseCompareJson(textB, 'b');
+        if (!pa.ok || !pb.ok) {
+            elements.compareResultsContent.innerHTML = `
+                <div class="empty-state error-state">
+                    <span class="material-icons">error_outline</span>
+                    <p>Fix JSON errors in the panels above, then run Compare again</p>
+                </div>`;
+            lastCompareReportText = '';
+            return;
+        }
+        const diffs = [];
+        compareJsonValues(pa.data, pb.data, [], diffs);
+        const truncated = diffs.length >= COMPARE_MAX_DIFFS;
+        lastCompareReportText = buildCompareReport(diffs, truncated);
+        if (diffs.length === 0) {
+            elements.compareResultsContent.innerHTML = `
+                <div class="compare-summary equal">
+                    <span class="material-icons">check_circle</span>
+                    <span>No differences — values are semantically equal (key order ignored).</span>
+                </div>`;
+            return;
+        }
+        let html = `
+            <div class="compare-summary diff">
+                <span class="material-icons">warning</span>
+                <span><strong>${diffs.length}${truncated ? '+' : ''}</strong> difference${diffs.length === 1 ? '' : 's'} found</span>
+            </div>
+            <ul class="compare-diff-list">`;
+        for (let i = 0; i < diffs.length; i++) {
+            html += renderCompareDiffItem(diffs[i]);
+        }
+        html += '</ul>';
+        if (truncated) {
+            html += `<p class="compare-diff-truncated">List truncated at ${COMPARE_MAX_DIFFS} differences.</p>`;
+        }
+        elements.compareResultsContent.innerHTML = html;
+    }
+
+    function copyCompareReport() {
+        if (!lastCompareReportText) {
+            showToast('Run Compare first to generate a report', 'error');
+            return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(lastCompareReportText).then(() => {
+                showToast('Report copied to clipboard', 'success');
+            }).catch(() => showToast('Could not copy', 'error'));
+        } else {
+            showToast('Clipboard not available', 'error');
+        }
+    }
+
     // ============ Bookmark ============
     function initBookmark() {
         elements.bookmarkBtn.addEventListener('click', addBookmark);
@@ -2921,6 +3473,7 @@
         initBson();
         initMsgpack();
         initCbor();
+        initCompare();
         initBookmark();
         initAbout();
         initTheme();

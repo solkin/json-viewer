@@ -19,8 +19,8 @@
     
     <!-- SEO Meta Tags -->
     <title>JSON-Viewer.Ru — Free Online JSON Editor, Formatter, Validator & Converter</title>
-    <meta name="description" content="Free online JSON tool: edit JSON with syntax highlighting, format and minify, validate structure, view interactive tree, auto-generate JSON Schema, validate against schema, convert to BSON, MsgPack and CBOR binary formats. Fast, lightweight, no registration required.">
-    <meta name="keywords" content="json viewer, json editor, json formatter, json minifier, json validator, json beautifier, json tree view, json schema generator, json schema validator, json to bson, json to msgpack, json to cbor, binary json, online json tool, free json editor, json parser, json structure viewer, json file editor, cbor converter">
+    <meta name="description" content="Free online JSON tool: edit JSON with syntax highlighting, format and minify, validate structure, view interactive tree, compare two JSON documents semantically, auto-generate JSON Schema, validate against schema, convert to BSON, MsgPack and CBOR binary formats. Fast, lightweight, no registration required.">
+    <meta name="keywords" content="json viewer, json editor, json formatter, json minifier, json validator, json beautifier, json tree view, json compare, json diff, json schema generator, json schema validator, json to bson, json to msgpack, json to cbor, binary json, online json tool, free json editor, json parser, json structure viewer, json file editor, cbor converter">
     <meta name="author" content="Igor Solkin">
     <link rel="canonical" href="https://json-viewer.ru/">
     
@@ -70,6 +70,7 @@
             "JSON minification",
             "JSON validation with error highlighting",
             "Interactive JSON tree viewer",
+            "Semantic JSON comparison and diff report",
             "JSON Schema auto-generation",
             "JSON Schema validation",
             "JSON to BSON conversion",
@@ -145,6 +146,10 @@
             <button class="tab" data-tab="viewer">
                 <span class="material-icons">account_tree</span>
                 Viewer
+            </button>
+            <button class="tab" data-tab="compare">
+                <span class="material-icons">compare_arrows</span>
+                Compare
             </button>
             <button class="tab" data-tab="schema">
                 <span class="material-icons">schema</span>
@@ -246,6 +251,96 @@
                             <div class="empty-state">
                                 <span class="material-icons">touch_app</span>
                                 <p>Click on any element to view details</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Compare Tab -->
+            <section id="compare-tab" class="tab-panel">
+                <div class="compare-container">
+                    <div class="toolbar compare-toolbar">
+                        <button class="btn btn-primary" id="compare-run-btn" title="Compare two JSON documents">
+                            <span class="material-icons">play_arrow</span>
+                            Compare
+                        </button>
+                        <button class="btn btn-secondary" id="compare-swap-btn" title="Swap JSON A and JSON B">
+                            <span class="material-icons">swap_horiz</span>
+                            Swap
+                        </button>
+                        <button class="btn btn-secondary" id="compare-from-editor-a-btn" title="Copy text from main JSON editor into A">
+                            <span class="material-icons">input</span>
+                            Editor → A
+                        </button>
+                        <button class="btn btn-secondary" id="compare-from-editor-b-btn" title="Copy text from main JSON editor into B">
+                            <span class="material-icons">input</span>
+                            Editor → B
+                        </button>
+                        <label class="btn btn-secondary" title="Load JSON file into A">
+                            <span class="material-icons">upload</span>
+                            Load A
+                            <input type="file" id="upload-compare-a" accept=".json,.txt,application/json" hidden>
+                        </label>
+                        <label class="btn btn-secondary" title="Load JSON file into B">
+                            <span class="material-icons">upload</span>
+                            Load B
+                            <input type="file" id="upload-compare-b" accept=".json,.txt,application/json" hidden>
+                        </label>
+                        <button class="btn btn-secondary" id="compare-copy-report-btn" title="Copy diff report as plain text">
+                            <span class="material-icons">content_copy</span>
+                            Copy report
+                        </button>
+                        <div class="toolbar-spacer"></div>
+                        <span class="compare-toolbar-hint">Semantic · key order ignored · arrays by index</span>
+                    </div>
+                    <div class="compare-editors">
+                        <div class="compare-editor-panel">
+                            <div class="panel-header">
+                                <span class="material-icons">looks_one</span>
+                                <span>JSON A</span>
+                            </div>
+                            <div class="editor-container compare-editor-container">
+                                <div class="line-numbers" id="compare-a-line-numbers"></div>
+                                <div class="editor-wrapper">
+                                    <div class="editor-scroll-container" id="compare-a-scroll">
+                                        <div class="editor-content">
+                                            <pre class="syntax-highlight" id="compare-a-syntax"></pre>
+                                            <textarea id="compare-json-a" spellcheck="false" placeholder="Paste or load JSON A..."></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="compare-parse-error" id="compare-error-a" hidden></div>
+                        </div>
+                        <div class="compare-editor-panel">
+                            <div class="panel-header">
+                                <span class="material-icons">looks_two</span>
+                                <span>JSON B</span>
+                            </div>
+                            <div class="editor-container compare-editor-container">
+                                <div class="line-numbers" id="compare-b-line-numbers"></div>
+                                <div class="editor-wrapper">
+                                    <div class="editor-scroll-container" id="compare-b-scroll">
+                                        <div class="editor-content">
+                                            <pre class="syntax-highlight" id="compare-b-syntax"></pre>
+                                            <textarea id="compare-json-b" spellcheck="false" placeholder="Paste or load JSON B..."></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="compare-parse-error" id="compare-error-b" hidden></div>
+                        </div>
+                    </div>
+                    <div class="compare-results-panel">
+                        <div class="panel-header">
+                            <span class="material-icons">view_list</span>
+                            <span>Diff</span>
+                        </div>
+                        <div class="compare-results-content" id="compare-results-content">
+                            <div class="empty-state">
+                                <span class="material-icons">compare_arrows</span>
+                                <p>Enter JSON in both panels and click Compare</p>
                             </div>
                         </div>
                     </div>
@@ -488,6 +583,7 @@
                         <li><span class="material-icons">compress</span> Minify JSON</li>
                         <li><span class="material-icons">check_circle</span> Validate JSON structure</li>
                         <li><span class="material-icons">account_tree</span> Interactive tree viewer</li>
+                        <li><span class="material-icons">compare_arrows</span> Semantic JSON compare (two documents, diff report)</li>
                         <li><span class="material-icons">schema</span> Auto-generate JSON Schema</li>
                         <li><span class="material-icons">memory</span> Convert to BSON format</li>
                         <li><span class="material-icons">all_inbox</span> Convert to MsgPack format</li>
