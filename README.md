@@ -9,6 +9,7 @@ A fast, lightweight online JSON tool for developers. No external dependencies, n
 - **JSON Editor** — Syntax highlighting, auto-formatting, minification, validation with error highlighting
 - **Tree Viewer** — Interactive collapsible tree with detailed node information
 - **JSON Compare** — Side-by-side semantic diff (key order ignored, arrays compared by index); swap panels, load from main editor or files, copy text report
+- **YAML Converter** — Convert JSON to YAML and YAML to JSON, live in both directions; supports block & flow styles, `|`/`>` block scalars, comments, anchors/aliases and merge keys (`<<`), and multi-document streams
 - **Schema Generator & Validator** — Auto-generate JSON Schema, edit it, and validate JSON against schema
 - **BSON Converter** — Convert JSON to BSON binary format with size comparison
 - **MsgPack Converter** — Convert JSON to MessagePack format with size comparison

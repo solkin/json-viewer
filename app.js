@@ -68,6 +68,23 @@
         compareResultsContent: document.getElementById('compare-results-content'),
         uploadCompareA: document.getElementById('upload-compare-a'),
         uploadCompareB: document.getElementById('upload-compare-b'),
+        yamlToYamlBtn: document.getElementById('yaml-to-yaml-btn'),
+        yamlToJsonBtn: document.getElementById('yaml-to-json-btn'),
+        yamlFromEditorBtn: document.getElementById('yaml-from-editor-btn'),
+        yamlCopyBtn: document.getElementById('yaml-copy-btn'),
+        yamlDownloadBtn: document.getElementById('yaml-download-btn'),
+        yamlClearBtn: document.getElementById('yaml-clear-btn'),
+        uploadYaml: document.getElementById('upload-yaml'),
+        yamlJsonEditor: document.getElementById('yaml-json-editor'),
+        yamlYamlEditor: document.getElementById('yaml-yaml-editor'),
+        yamlJsonLineNumbers: document.getElementById('yaml-json-line-numbers'),
+        yamlYamlLineNumbers: document.getElementById('yaml-yaml-line-numbers'),
+        yamlJsonScroll: document.getElementById('yaml-json-scroll'),
+        yamlYamlScroll: document.getElementById('yaml-yaml-scroll'),
+        yamlJsonSyntax: document.getElementById('yaml-json-syntax'),
+        yamlYamlSyntax: document.getElementById('yaml-yaml-syntax'),
+        yamlErrorJson: document.getElementById('yaml-error-json'),
+        yamlErrorYaml: document.getElementById('yaml-error-yaml'),
         toast: document.getElementById('toast'),
         bookmarkBtn: document.getElementById('bookmark-btn'),
         aboutBtn: document.getElementById('about-btn'),
@@ -93,6 +110,11 @@
     let lastCompareReportText = '';
     let compareErrorLineA = null;
     let compareErrorLineB = null;
+
+    let yamlSeeded = false;
+    let yamlDebounce = null;
+    let yamlJsonErrorLine = null;
+    let yamlYamlErrorLine = null;
 
     // ============ Tab Navigation ============
     function initTabs() {
@@ -159,6 +181,16 @@
             } else {
                 showCborEmpty();
             }
+        }
+
+        if (tabId === 'yaml') {
+            // On first open, seed the JSON pane from the main editor and convert.
+            if (!yamlSeeded && !elements.yamlJsonEditor.value.trim() && elements.editor.value.trim()) {
+                elements.yamlJsonEditor.value = elements.editor.value;
+                refreshYamlEditor('json');
+                convertYaml('to-yaml', true);
+            }
+            yamlSeeded = true;
         }
     }
     
@@ -3348,6 +3380,924 @@
         }
     }
 
+    // ============ YAML <-> JSON ============
+    // Dependency-free YAML engine. Serializer is full-coverage; parser supports the
+    // practical subset engineers use: block & flow collections, |/> block scalars
+    // (with chomping), comments, anchors/aliases, merge keys (<<) and multi-document.
+    const YAML = (function() {
+        /* ---------- JSON -> YAML (serializer) ---------- */
+        function stringify(value) {
+            const lines = [];
+
+            function inferWouldChange(str) {
+                const parsed = parseScalarText(str);
+                return typeof parsed !== 'string' || parsed !== str;
+            }
+
+            function needsQuoting(str) {
+                if (str === '') return true;
+                if (inferWouldChange(str)) return true;
+                if (/^\s|\s$/.test(str)) return true;                 // leading/trailing whitespace
+                if (/^[,\[\]{}#&*!|>'"%@`]/.test(str)) return true;   // flow/indicator start chars
+                if (/^[-?:](\s|$)/.test(str)) return true;            // "- ", "? ", ": " / bare "-"
+                if (/:(\s|$)/.test(str)) return true;                 // "key: val" ambiguity
+                if (/(^|\s)#/.test(str)) return true;                 // inline comment ambiguity
+                if (/[\t\r\x00-\x08\x0b\x0c\x0e-\x1f]/.test(str)) return true; // control chars
+                return false;
+            }
+
+            function quoteDouble(str) {
+                let out = '"';
+                for (const ch of str) {
+                    const code = ch.codePointAt(0);
+                    if (ch === '"') out += '\\"';
+                    else if (ch === '\\') out += '\\\\';
+                    else if (ch === '\n') out += '\\n';
+                    else if (ch === '\t') out += '\\t';
+                    else if (ch === '\r') out += '\\r';
+                    else if (code < 0x20) out += '\\x' + code.toString(16).padStart(2, '0');
+                    else out += ch;
+                }
+                return out + '"';
+            }
+
+            function formatScalar(v) {
+                if (v === null) return 'null';
+                if (v === true) return 'true';
+                if (v === false) return 'false';
+                if (typeof v === 'number') {
+                    if (!isFinite(v)) return quoteDouble(String(v));
+                    return String(v);
+                }
+                const str = String(v);
+                return needsQuoting(str) ? quoteDouble(str) : str;
+            }
+
+            function blockScalarSafe(str) {
+                if (str.indexOf('\r') !== -1) return false;
+                const body = str.endsWith('\n') ? str.slice(0, -1) : str;
+                for (const line of body.split('\n')) {
+                    if (/^\s/.test(line)) return false;   // leading whitespace needs indent indicator
+                    if (/\s$/.test(line)) return false;   // trailing whitespace gets stripped on parse
+                }
+                return true;
+            }
+
+            function isEmpty(v) {
+                if (Array.isArray(v)) return v.length === 0;
+                if (v && typeof v === 'object') return Object.keys(v).length === 0;
+                return false;
+            }
+
+            function emitBlockScalarInline(str, indent) {
+                const pad = '  '.repeat(indent);
+                const k = str.match(/\n*$/)[0].length; // trailing newline count
+                let header, contentLines, trailingBlanks;
+                if (k === 0) { header = '|-'; contentLines = str.split('\n'); trailingBlanks = 0; }
+                else if (k === 1) { header = '|'; contentLines = str.slice(0, -1).split('\n'); trailingBlanks = 0; }
+                else { header = '|+'; contentLines = str.replace(/\n+$/, '').split('\n'); trailingBlanks = k - 1; }
+                lines[lines.length - 1] += ' ' + header;
+                for (const line of contentLines) lines.push(line === '' ? '' : pad + line);
+                for (let n = 0; n < trailingBlanks; n++) lines.push('');
+            }
+
+            function emitMapping(obj, indent) {
+                const pad = '  '.repeat(indent);
+                for (const key of Object.keys(obj)) {
+                    const v = obj[key];
+                    const keyStr = needsQuoting(key) ? quoteDouble(key) : key;
+                    if (v === null || typeof v !== 'object') {
+                        if (typeof v === 'string' && v.indexOf('\n') !== -1 && blockScalarSafe(v)) {
+                            lines.push(pad + keyStr + ':');
+                            emitBlockScalarInline(v, indent + 1);
+                        } else {
+                            lines.push(pad + keyStr + ': ' + formatScalar(v));
+                        }
+                    } else if (isEmpty(v)) {
+                        lines.push(pad + keyStr + ': ' + (Array.isArray(v) ? '[]' : '{}'));
+                    } else if (Array.isArray(v)) {
+                        lines.push(pad + keyStr + ':');
+                        emitSequence(v, indent + 1);
+                    } else {
+                        lines.push(pad + keyStr + ':');
+                        emitMapping(v, indent + 1);
+                    }
+                }
+            }
+
+            function emitSequence(arr, indent) {
+                const pad = '  '.repeat(indent);
+                for (const v of arr) {
+                    if (v === null || typeof v !== 'object') {
+                        if (typeof v === 'string' && v.indexOf('\n') !== -1 && blockScalarSafe(v)) {
+                            lines.push(pad + '-');
+                            emitBlockScalarInline(v, indent + 1);
+                        } else {
+                            lines.push(pad + '- ' + formatScalar(v));
+                        }
+                    } else if (isEmpty(v)) {
+                        lines.push(pad + '- ' + (Array.isArray(v) ? '[]' : '{}'));
+                    } else if (Array.isArray(v)) {
+                        lines.push(pad + '-');
+                        emitSequence(v, indent + 1);
+                    } else {
+                        emitSeqMapping(v, indent);
+                    }
+                }
+            }
+
+            function emitSeqMapping(obj, indent) {
+                const pad = '  '.repeat(indent);
+                const childPad = '  '.repeat(indent + 1);
+                const before = lines.length;
+                emitMapping(obj, indent + 1);
+                if (lines.length > before) {
+                    lines[before] = pad + '- ' + lines[before].slice(childPad.length);
+                }
+            }
+
+            if (value === null || typeof value !== 'object') return formatScalar(value) + '\n';
+            if (isEmpty(value)) return (Array.isArray(value) ? '[]' : '{}') + '\n';
+            if (Array.isArray(value)) emitSequence(value, 0);
+            else emitMapping(value, 0);
+            return lines.join('\n') + '\n';
+        }
+
+        /* ---------- scalar parsing (shared) ---------- */
+        function parseScalarText(s) {
+            if (s === '' || s === '~' || s === 'null' || s === 'Null' || s === 'NULL') return null;
+            if (s === 'true' || s === 'True' || s === 'TRUE') return true;
+            if (s === 'false' || s === 'False' || s === 'FALSE') return false;
+            if (/^[-+]?0[0-9_]+$/.test(s)) return s;                 // leading zero -> string (zip, id)
+            if (/^[-+]?[0-9]+$/.test(s)) {
+                const n = parseInt(s, 10);
+                return Number.isSafeInteger(n) ? n : s;             // preserve big ints as string
+            }
+            if (/^0x[0-9a-fA-F]+$/.test(s)) return parseInt(s, 16);
+            if (/^0o[0-7]+$/.test(s)) return parseInt(s.slice(2), 8);
+            if (/^[-+]?(\.[0-9]+|[0-9]+\.?[0-9]*)([eE][-+]?[0-9]+)?$/.test(s) && /[0-9]/.test(s)) {
+                return parseFloat(s);
+            }
+            return s;
+        }
+
+        /* ---------- YAML -> JSON (parser) ---------- */
+        function parse(text) {
+            text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+            const raw = text.split('\n');
+            // Drop the phantom empty line from a terminating newline so block-scalar
+            // trailing-blank accounting is not off by one.
+            if (raw.length > 1 && raw[raw.length - 1] === '' && text.endsWith('\n')) raw.pop();
+
+            const lines = raw.map((l, idx) => {
+                const ws = l.match(/^([ \t]*)/)[1];
+                if (ws.indexOf('\t') !== -1 && l.slice(ws.length) !== '') {
+                    throw new Error('Tabs cannot be used for indentation (line ' + (idx + 1) + ')');
+                }
+                const content = l.slice(ws.length);
+                const trimmed = content.replace(/\s+$/, '');
+                return {
+                    indent: ws.length,
+                    content: content,
+                    lineNo: idx + 1,
+                    blank: trimmed === '',
+                    comment: trimmed[0] === '#'
+                };
+            });
+
+            const docs = [];
+            let cur = [];
+            for (const ln of lines) {
+                if (ln.indent === 0 && (ln.content.trim() === '---' || /^---\s/.test(ln.content))) {
+                    docs.push(cur); cur = [];
+                    const after = ln.content.trim().replace(/^---\s*/, '');
+                    if (after) cur.push({ indent: 0, content: after, lineNo: ln.lineNo, blank: false, comment: after[0] === '#' });
+                    continue;
+                }
+                if (ln.indent === 0 && ln.content.trim() === '...') { docs.push(cur); cur = []; continue; }
+                cur.push(ln);
+            }
+            docs.push(cur);
+            const docSets = docs.filter(d => d.some(l => !l.blank && !l.comment));
+
+            const results = docSets.length ? docSets.map(parseDocument) : [null];
+            return results.length === 1 ? results[0] : results;
+        }
+
+        function parseDocument(docLines) {
+            const anchors = {};
+            let i = 0;
+
+            function nextSig() {
+                let j = i;
+                while (j < docLines.length && (docLines[j].blank || docLines[j].comment)) j++;
+                return j < docLines.length ? j : -1;
+            }
+
+            function stripComment(s) {
+                let depth = 0;
+                for (let k = 0; k < s.length; k++) {
+                    const c = s[k];
+                    if (c === '"') { k = skipDouble(s, k) - 1; continue; }
+                    if (c === "'") { k = skipSingle(s, k) - 1; continue; }
+                    if (c === '[' || c === '{') depth++;
+                    else if (c === ']' || c === '}') depth--;
+                    else if (c === '#' && (k === 0 || /\s/.test(s[k - 1]))) return s.slice(0, k);
+                }
+                return s;
+            }
+
+            function findKeyColon(s) {
+                let depth = 0;
+                for (let k = 0; k < s.length; k++) {
+                    const c = s[k];
+                    if (c === '"') { k = skipDouble(s, k) - 1; continue; }
+                    if (c === "'") { k = skipSingle(s, k) - 1; continue; }
+                    if (c === '[' || c === '{') depth++;
+                    else if (c === ']' || c === '}') depth--;
+                    else if (c === '#' && k > 0 && /\s/.test(s[k - 1])) break;
+                    else if (c === ':' && depth === 0) {
+                        const nx = s[k + 1];
+                        if (nx === undefined || nx === ' ' || nx === '\t') return k;
+                    }
+                }
+                return -1;
+            }
+
+            function isSeqEntry(content) { return /^-(\s|$)/.test(content); }
+
+            function parseNodeAt(indent) {
+                const j = nextSig();
+                if (j === -1) return null;
+                const line = docLines[j];
+                if (line.indent < indent) return null;
+                if (isSeqEntry(line.content)) return parseSequence(line.indent);
+                if (findKeyColon(line.content) !== -1) return parseMapping(line.indent);
+                i = j + 1;
+                return parseValueToken(line.content, line.indent, line);
+            }
+
+            function parseMapping(indent) {
+                const obj = {};
+                const merges = [];
+                while (true) {
+                    const j = nextSig();
+                    if (j === -1) break;
+                    const line = docLines[j];
+                    if (line.indent < indent) break;
+                    if (line.indent > indent) throw new Error('Bad indentation (line ' + line.lineNo + ')');
+                    if (isSeqEntry(line.content)) break;
+                    const colon = findKeyColon(line.content);
+                    if (colon === -1) throw new Error('Expected "key: value" (line ' + line.lineNo + ')');
+                    const keyText = line.content.slice(0, colon).trim();
+                    const rest = line.content.slice(colon + 1).trim();
+                    i = j + 1;
+                    const key = parseKey(keyText);
+                    const value = parseAfterColon(rest, indent, line);
+                    if (key === '<<') {
+                        if (Array.isArray(value)) merges.push(...value);
+                        else merges.push(value);
+                    } else {
+                        obj[key] = value;
+                    }
+                }
+                if (merges.length) {
+                    const base = {};
+                    for (const m of merges) if (m && typeof m === 'object') Object.assign(base, m);
+                    return Object.assign(base, obj);
+                }
+                return obj;
+            }
+
+            function parseKey(keyText) {
+                if (keyText === '') return '';
+                if (keyText[0] === '"') return readDouble(keyText, 0)[0];
+                if (keyText[0] === "'") return readSingle(keyText, 0)[0];
+                return keyText;
+            }
+
+            function parseAfterColon(rest, keyIndent, line) {
+                if (rest === '') {
+                    const j = nextSig();
+                    if (j === -1) return null;
+                    const child = docLines[j];
+                    if (child.indent > keyIndent) return parseNodeAt(child.indent);
+                    if (child.indent === keyIndent && isSeqEntry(child.content)) return parseSequence(keyIndent);
+                    return null;
+                }
+                const am = rest.match(/^&(\S+)\s*$/);
+                if (am) {
+                    const val = parseAfterColon('', keyIndent, line);
+                    anchors[am[1]] = val;
+                    return val;
+                }
+                return parseValueToken(rest, keyIndent, line);
+            }
+
+            function parseSequence(indent) {
+                const arr = [];
+                while (true) {
+                    const j = nextSig();
+                    if (j === -1) break;
+                    const line = docLines[j];
+                    if (line.indent < indent) break;
+                    if (line.indent > indent) throw new Error('Bad indentation (line ' + line.lineNo + ')');
+                    if (!isSeqEntry(line.content)) break;
+                    const dash = line.content.match(/^-(\s+|$)/)[0];
+                    const after = line.content.slice(dash.length);
+                    const contentIndent = line.indent + dash.length;
+                    if (after === '') {
+                        i = j + 1;
+                        const k = nextSig();
+                        if (k !== -1 && docLines[k].indent > line.indent) {
+                            arr.push(parseNodeAt(docLines[k].indent));
+                        } else {
+                            arr.push(null);
+                        }
+                    } else {
+                        // rewrite line so the dash becomes leading space, then parse a node there
+                        docLines[j] = { indent: contentIndent, content: after, lineNo: line.lineNo, blank: false, comment: false };
+                        arr.push(parseNodeAt(contentIndent));
+                    }
+                }
+                return arr;
+            }
+
+            function parseValueToken(token, indent, line) {
+                token = stripComment(token).trim();
+                if (token === '') return null;
+                let forceStr = false;
+                if (token[0] === '!') {
+                    const tm = token.match(/^!\S*\s*/);
+                    forceStr = /^!!str\b/.test(token);
+                    token = token.slice(tm[0].length);
+                    if (token === '') return forceStr ? '' : null;
+                }
+                const am = token.match(/^&(\S+)\s+/);
+                if (am) {
+                    const val = parseValueToken(token.slice(am[0].length), indent, line);
+                    anchors[am[1]] = val;
+                    return val;
+                }
+                if (token[0] === '*') {
+                    const name = token.slice(1).trim();
+                    if (!(name in anchors)) throw new Error('Unknown alias *' + name + ' (line ' + line.lineNo + ')');
+                    return deepClone(anchors[name]);
+                }
+                if (token === '|' || token === '>' || /^[|>][+-]?[0-9]?$/.test(token)) {
+                    return parseBlockScalar(token, indent);
+                }
+                if (token[0] === '[' || token[0] === '{') {
+                    return parseFlow(token, 0)[0];
+                }
+                if (token[0] === '"') return readDouble(token, 0)[0];
+                if (token[0] === "'") return readSingle(token, 0)[0];
+                return forceStr ? token : parseScalarText(token);
+            }
+
+            function parseBlockScalar(header, parentIndent) {
+                const style = header[0]; // | or >
+                let chomp = '';
+                let explicitIndent = 0;
+                for (let k = 1; k < header.length; k++) {
+                    const c = header[k];
+                    if (c === '+' || c === '-') chomp = c;
+                    else if (/[0-9]/.test(c)) explicitIndent = parseInt(c, 10);
+                }
+                const collected = [];
+                let blockIndent = explicitIndent ? parentIndent + explicitIndent : null;
+                while (i < docLines.length) {
+                    const ln = docLines[i];
+                    if (ln.blank) { collected.push(''); i++; continue; }
+                    if (ln.indent <= parentIndent) break;
+                    if (blockIndent === null) blockIndent = ln.indent;
+                    if (ln.indent < blockIndent) break;
+                    const full = ' '.repeat(ln.indent) + ln.content;
+                    collected.push(full.slice(blockIndent));
+                    i++;
+                }
+                let end = collected.length;
+                while (end > 0 && collected[end - 1] === '') end--;
+                const contentLines = collected.slice(0, end);
+                const trailingBlanks = collected.length - end;
+
+                let body;
+                if (style === '|') {
+                    body = contentLines.join('\n');
+                } else {
+                    body = '';
+                    for (let k = 0; k < contentLines.length; k++) {
+                        const l = contentLines[k];
+                        if (k === 0) body = l;
+                        else if (l === '' || contentLines[k - 1] === '') body += '\n' + l;
+                        else if (/^\s/.test(l) || /^\s/.test(contentLines[k - 1])) body += '\n' + l;
+                        else body += ' ' + l;
+                    }
+                }
+                if (!contentLines.length) return chomp === '+' ? '\n'.repeat(trailingBlanks) : '';
+                if (chomp === '-') return body;                                     // strip
+                if (chomp === '+') return body + '\n' + '\n'.repeat(trailingBlanks); // keep
+                return body + '\n';                                                // clip
+            }
+
+            function parseFlow(s, idx) {
+                idx = skipWs(s, idx);
+                const c = s[idx];
+                if (c === '[') return parseFlowSeq(s, idx);
+                if (c === '{') return parseFlowMap(s, idx);
+                return parseFlowScalar(s, idx);
+            }
+
+            function parseFlowSeq(s, idx) {
+                const arr = [];
+                idx = skipWs(s, idx + 1);
+                if (s[idx] === ']') return [arr, idx + 1];
+                while (idx < s.length) {
+                    idx = skipWs(s, idx);
+                    if (s[idx] === ']') { idx++; break; }
+                    if (s[idx] === ',') { arr.push(null); idx++; continue; }
+                    const [val, next] = parseFlow(s, idx);
+                    arr.push(val);
+                    idx = skipWs(s, next);
+                    if (s[idx] === ',') { idx++; continue; }
+                    if (s[idx] === ']') { idx++; break; }
+                    throw new Error('Malformed flow sequence');
+                }
+                return [arr, idx];
+            }
+
+            function parseFlowMap(s, idx) {
+                const obj = {};
+                idx = skipWs(s, idx + 1);
+                if (s[idx] === '}') return [obj, idx + 1];
+                while (idx < s.length) {
+                    idx = skipWs(s, idx);
+                    if (s[idx] === '}') { idx++; break; }
+                    let key, next;
+                    if (s[idx] === '"') { [key, next] = readDouble(s, idx); }
+                    else if (s[idx] === "'") { [key, next] = readSingle(s, idx); }
+                    else {
+                        let k = idx;
+                        while (k < s.length && s[k] !== ':' && s[k] !== ',' && s[k] !== '}') k++;
+                        key = s.slice(idx, k).trim();
+                        next = k;
+                    }
+                    idx = skipWs(s, next);
+                    if (s[idx] === ':') {
+                        idx = skipWs(s, idx + 1);
+                        if (s[idx] === ',' || s[idx] === '}') { obj[key] = null; }
+                        else { const [val, n2] = parseFlow(s, idx); obj[key] = val; idx = skipWs(s, n2); }
+                    } else {
+                        obj[key] = null;
+                    }
+                    if (s[idx] === ',') { idx++; continue; }
+                    if (s[idx] === '}') { idx++; break; }
+                }
+                return [obj, idx];
+            }
+
+            function parseFlowScalar(s, idx) {
+                const c = s[idx];
+                if (c === '"') return readDouble(s, idx);
+                if (c === "'") return readSingle(s, idx);
+                if (c === '*') {
+                    let k = idx + 1;
+                    while (k < s.length && s[k] !== ',' && s[k] !== ']' && s[k] !== '}') k++;
+                    const name = s.slice(idx + 1, k).trim();
+                    if (!(name in anchors)) throw new Error('Unknown alias *' + name);
+                    return [deepClone(anchors[name]), k];
+                }
+                let k = idx;
+                while (k < s.length && s[k] !== ',' && s[k] !== ']' && s[k] !== '}') k++;
+                return [parseScalarText(s.slice(idx, k).trim()), k];
+            }
+
+            return parseNodeAt(0);
+        }
+
+        /* ---------- low-level scalar readers ---------- */
+        function skipWs(s, i) { while (i < s.length && (s[i] === ' ' || s[i] === '\t')) i++; return i; }
+
+        function skipDouble(s, i) {
+            i++;
+            while (i < s.length) {
+                if (s[i] === '\\') { i += 2; continue; }
+                if (s[i] === '"') return i + 1;
+                i++;
+            }
+            return i;
+        }
+
+        function skipSingle(s, i) {
+            i++;
+            while (i < s.length) {
+                if (s[i] === "'") {
+                    if (s[i + 1] === "'") { i += 2; continue; }
+                    return i + 1;
+                }
+                i++;
+            }
+            return i;
+        }
+
+        function readDouble(s, i) {
+            i++;
+            let out = '';
+            while (i < s.length) {
+                const c = s[i];
+                if (c === '\\') {
+                    const n = s[i + 1];
+                    if (n === 'n') out += '\n';
+                    else if (n === 't') out += '\t';
+                    else if (n === 'r') out += '\r';
+                    else if (n === '"') out += '"';
+                    else if (n === '\\') out += '\\';
+                    else if (n === '/') out += '/';
+                    else if (n === 'b') out += '\b';
+                    else if (n === 'f') out += '\f';
+                    else if (n === '0') out += '\0';
+                    else if (n === 'u') { out += String.fromCharCode(parseInt(s.substr(i + 2, 4), 16)); i += 4; }
+                    else if (n === 'x') { out += String.fromCharCode(parseInt(s.substr(i + 2, 2), 16)); i += 2; }
+                    else out += n;
+                    i += 2;
+                    continue;
+                }
+                if (c === '"') return [out, i + 1];
+                out += c;
+                i++;
+            }
+            throw new Error('Unterminated double-quoted string');
+        }
+
+        function readSingle(s, i) {
+            i++;
+            let out = '';
+            while (i < s.length) {
+                const c = s[i];
+                if (c === "'") {
+                    if (s[i + 1] === "'") { out += "'"; i += 2; continue; }
+                    return [out, i + 1];
+                }
+                out += c;
+                i++;
+            }
+            throw new Error('Unterminated single-quoted string');
+        }
+
+        function deepClone(v) {
+            if (v === null || typeof v !== 'object') return v;
+            if (Array.isArray(v)) return v.map(deepClone);
+            const o = {};
+            for (const k of Object.keys(v)) o[k] = deepClone(v[k]);
+            return o;
+        }
+
+        return { stringify: stringify, parse: parse };
+    })();
+
+    function initYaml() {
+        elements.yamlToYamlBtn.addEventListener('click', () => convertYaml('to-yaml', false));
+        elements.yamlToJsonBtn.addEventListener('click', () => convertYaml('to-json', false));
+        elements.yamlFromEditorBtn.addEventListener('click', () => {
+            elements.yamlJsonEditor.value = elements.editor.value;
+            hideYamlError('json');
+            refreshYamlEditor('json');
+            convertYaml('to-yaml', true);
+            showToast('Pulled JSON from editor', 'success');
+        });
+        elements.yamlCopyBtn.addEventListener('click', copyYamlOutput);
+        elements.yamlDownloadBtn.addEventListener('click', downloadYaml);
+        elements.yamlClearBtn.addEventListener('click', clearYaml);
+        elements.uploadYaml.addEventListener('change', uploadYamlFile);
+
+        elements.yamlJsonEditor.addEventListener('input', () => onYamlInput('json'));
+        elements.yamlYamlEditor.addEventListener('input', () => onYamlInput('yaml'));
+        elements.yamlJsonEditor.addEventListener('keydown', handleYamlKeyDown);
+        elements.yamlYamlEditor.addEventListener('keydown', handleYamlKeyDown);
+        elements.yamlJsonEditor.addEventListener('click', () => scrollToCaretYaml('json'));
+        elements.yamlJsonEditor.addEventListener('keyup', () => scrollToCaretYaml('json'));
+        elements.yamlYamlEditor.addEventListener('click', () => scrollToCaretYaml('yaml'));
+        elements.yamlYamlEditor.addEventListener('keyup', () => scrollToCaretYaml('yaml'));
+        elements.yamlJsonScroll.addEventListener('scroll', () => syncYamlLineNumbers('json'), { passive: true });
+        elements.yamlYamlScroll.addEventListener('scroll', () => syncYamlLineNumbers('yaml'), { passive: true });
+        elements.yamlJsonScroll.addEventListener('click', () => elements.yamlJsonEditor.focus());
+        elements.yamlYamlScroll.addEventListener('click', () => elements.yamlYamlEditor.focus());
+
+        refreshYamlEditor('json');
+        refreshYamlEditor('yaml');
+    }
+
+    function onYamlInput(which) {
+        hideYamlError(which);
+        refreshYamlEditor(which);
+        scrollToCaretYaml(which);
+        clearTimeout(yamlDebounce);
+        yamlDebounce = setTimeout(() => convertYaml(which === 'json' ? 'to-yaml' : 'to-json', true), 300);
+    }
+
+    function handleYamlKeyDown(e) {
+        if (e.key !== 'Tab') return;
+        e.preventDefault();
+        const ta = e.target;
+        const which = ta === elements.yamlJsonEditor ? 'json' : 'yaml';
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
+        ta.selectionStart = ta.selectionEnd = start + 2;
+        hideYamlError(which);
+        refreshYamlEditor(which);
+        clearTimeout(yamlDebounce);
+        yamlDebounce = setTimeout(() => convertYaml(which === 'json' ? 'to-yaml' : 'to-json', true), 300);
+    }
+
+    function convertYaml(direction, silent) {
+        if (direction === 'to-yaml') {
+            const text = elements.yamlJsonEditor.value;
+            if (!text.trim()) {
+                elements.yamlYamlEditor.value = '';
+                hideYamlError('json');
+                refreshYamlEditor('yaml');
+                if (!silent) showToast('Enter JSON to convert', 'error');
+                return;
+            }
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (err) {
+                const msg = err.message || 'Invalid JSON';
+                yamlJsonErrorLine = getErrorLine(msg, text);
+                showYamlError('json', msg);
+                refreshYamlEditor('json');
+                return;
+            }
+            hideYamlError('json');
+            refreshYamlEditor('json');
+            let out;
+            try {
+                out = YAML.stringify(data);
+            } catch (err) {
+                showYamlError('json', err.message || 'Could not serialize to YAML');
+                return;
+            }
+            elements.yamlYamlEditor.value = out;
+            hideYamlError('yaml');
+            refreshYamlEditor('yaml');
+            if (!silent) showToast('Converted to YAML', 'success');
+        } else {
+            const text = elements.yamlYamlEditor.value;
+            if (!text.trim()) {
+                elements.yamlJsonEditor.value = '';
+                hideYamlError('yaml');
+                refreshYamlEditor('json');
+                if (!silent) showToast('Enter YAML to convert', 'error');
+                return;
+            }
+            let data;
+            try {
+                data = YAML.parse(text);
+            } catch (err) {
+                const msg = err.message || 'Invalid YAML';
+                const m = msg.match(/\(line (\d+)\)/);
+                yamlYamlErrorLine = m ? parseInt(m[1], 10) : null;
+                showYamlError('yaml', msg);
+                refreshYamlEditor('yaml');
+                return;
+            }
+            hideYamlError('yaml');
+            refreshYamlEditor('yaml');
+            elements.yamlJsonEditor.value = JSON.stringify(data, null, 2);
+            hideYamlError('json');
+            refreshYamlEditor('json');
+            if (!silent) showToast('Converted to JSON', 'success');
+        }
+    }
+
+    function refreshYamlEditor(which) {
+        if (which === 'json') {
+            updateLineNumbersFor(elements.yamlJsonEditor, elements.yamlJsonLineNumbers, yamlJsonErrorLine);
+            updateSyntaxHighlightFor(elements.yamlJsonEditor, elements.yamlJsonSyntax, yamlJsonErrorLine);
+        } else {
+            updateLineNumbersFor(elements.yamlYamlEditor, elements.yamlYamlLineNumbers, yamlYamlErrorLine);
+            let html = highlightYaml(elements.yamlYamlEditor.value);
+            if (yamlYamlErrorLine !== null) {
+                const ls = html.split('\n');
+                if (yamlYamlErrorLine >= 1 && yamlYamlErrorLine <= ls.length) {
+                    ls[yamlYamlErrorLine - 1] = '<span class="error-line">' + ls[yamlYamlErrorLine - 1] + '</span>';
+                    html = ls.join('\n');
+                }
+            }
+            elements.yamlYamlSyntax.innerHTML = html + '\n';
+        }
+    }
+
+    function syncYamlLineNumbers(which) {
+        if (which === 'json') {
+            elements.yamlJsonLineNumbers.scrollTop = elements.yamlJsonScroll.scrollTop;
+        } else {
+            elements.yamlYamlLineNumbers.scrollTop = elements.yamlYamlScroll.scrollTop;
+        }
+    }
+
+    function scrollToCaretYaml(which) {
+        const editor = which === 'json' ? elements.yamlJsonEditor : elements.yamlYamlEditor;
+        const scroll = which === 'json' ? elements.yamlJsonScroll : elements.yamlYamlScroll;
+        const pos = editor.selectionStart;
+        const before = editor.value.substring(0, pos).split('\n');
+        const lineNum = before.length;
+        const colNum = before[before.length - 1].length;
+        const lineHeight = 12 * 1.5;
+        const charWidth = 7.2;
+        const padding = 8;
+        const caretTop = (lineNum - 1) * lineHeight + padding;
+        const caretLeft = colNum * charWidth + padding;
+        const viewTop = scroll.scrollTop;
+        const viewBottom = viewTop + scroll.clientHeight;
+        const viewLeft = scroll.scrollLeft;
+        const viewRight = viewLeft + scroll.clientWidth;
+        if (caretTop < viewTop + padding) {
+            scroll.scrollTop = caretTop - padding;
+        } else if (caretTop + lineHeight > viewBottom - padding) {
+            scroll.scrollTop = caretTop + lineHeight - scroll.clientHeight + padding;
+        }
+        if (caretLeft < viewLeft + padding) {
+            scroll.scrollLeft = caretLeft - padding;
+        } else if (caretLeft > viewRight - padding * 2) {
+            scroll.scrollLeft = caretLeft - scroll.clientWidth + padding * 2;
+        }
+    }
+
+    function showYamlError(which, message) {
+        const el = which === 'json' ? elements.yamlErrorJson : elements.yamlErrorYaml;
+        el.hidden = false;
+        el.textContent = message;
+    }
+
+    function hideYamlError(which) {
+        if (which === 'json') {
+            elements.yamlErrorJson.hidden = true;
+            elements.yamlErrorJson.textContent = '';
+            yamlJsonErrorLine = null;
+        } else {
+            elements.yamlErrorYaml.hidden = true;
+            elements.yamlErrorYaml.textContent = '';
+            yamlYamlErrorLine = null;
+        }
+    }
+
+    function copyYamlOutput() {
+        const text = elements.yamlYamlEditor.value;
+        if (!text.trim()) {
+            showToast('Nothing to copy', 'error');
+            return;
+        }
+        navigator.clipboard.writeText(text)
+            .then(() => showToast('YAML copied to clipboard', 'success'))
+            .catch(() => showToast('Failed to copy', 'error'));
+    }
+
+    function downloadYaml() {
+        const text = elements.yamlYamlEditor.value;
+        if (!text.trim()) {
+            showToast('Nothing to download', 'error');
+            return;
+        }
+        const blob = new Blob([text], { type: 'application/x-yaml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'data.yaml';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('YAML downloaded', 'success');
+    }
+
+    function clearYaml() {
+        elements.yamlJsonEditor.value = '';
+        elements.yamlYamlEditor.value = '';
+        hideYamlError('json');
+        hideYamlError('yaml');
+        refreshYamlEditor('json');
+        refreshYamlEditor('yaml');
+        showToast('Cleared', 'success');
+    }
+
+    function uploadYamlFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            elements.yamlYamlEditor.value = e.target.result;
+            hideYamlError('yaml');
+            refreshYamlEditor('yaml');
+            convertYaml('to-json', true);
+            showToast('YAML loaded from ' + file.name, 'success');
+        };
+        reader.onerror = () => showToast('Failed to read file', 'error');
+        reader.readAsText(file);
+        event.target.value = '';
+    }
+
+    function highlightYaml(code) {
+        const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        function findInlineComment(s) {
+            let depth = 0;
+            for (let k = 0; k < s.length; k++) {
+                const c = s[k];
+                if (c === '"') { while (++k < s.length && !(s[k] === '"' && s[k - 1] !== '\\')) {} continue; }
+                if (c === "'") { while (++k < s.length && s[k] !== "'") {} continue; }
+                if (c === '[' || c === '{') depth++;
+                else if (c === ']' || c === '}') depth--;
+                else if (c === '#' && k > 0 && /\s/.test(s[k - 1])) return k;
+            }
+            return -1;
+        }
+
+        function findKeyColonLite(s) {
+            let depth = 0;
+            for (let k = 0; k < s.length; k++) {
+                const c = s[k];
+                if (c === '"') { while (++k < s.length && !(s[k] === '"' && s[k - 1] !== '\\')) {} continue; }
+                if (c === "'") { while (++k < s.length && s[k] !== "'") {} continue; }
+                if (c === '[' || c === '{') depth++;
+                else if (c === ']' || c === '}') depth--;
+                else if (c === ':' && depth === 0 && (s[k + 1] === undefined || s[k + 1] === ' ')) return k;
+            }
+            return -1;
+        }
+
+        function highlightInline(escaped) {
+            const strs = [];
+            // Encode placeholder index with letters (A-J) so the number/bracket
+            // passes below cannot corrupt it; restore strings last.
+            const enc = (n) => String(n).replace(/\d/g, (d) => String.fromCharCode(65 + (+d)));
+            const dec = (z) => z.replace(/[A-J]/g, (c) => String(c.charCodeAt(0) - 65));
+            escaped = escaped.replace(/"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'/g, (m) => {
+                strs.push(m);
+                return '\u0001' + enc(strs.length - 1) + '\u0001';
+            });
+            escaped = escaped.replace(/\b(true|false|True|False|TRUE|FALSE)\b/g, '<span class="boolean">$1</span>');
+            escaped = escaped.replace(/(^|[\s,\[{])(null|Null|NULL|~)(?=[\s,\]}]|$)/g, '$1<span class="null">$2</span>');
+            escaped = escaped.replace(/-?\b\d+\.?\d*(?:[eE][+-]?\d+)?\b/g, (m) => '<span class="number">' + m + '</span>');
+            escaped = escaped.replace(/([\[\]{}])/g, '<span class="bracket">$1</span>');
+            escaped = escaped.replace(/\u0001([A-J]+)\u0001/g, (_, idx) => '<span class="string">' + strs[+dec(idx)] + '</span>');
+            return escaped;
+        }
+
+        function highlightValue(s) {
+            const lead = s.match(/^(\s*)/)[1];
+            let v = s.slice(lead.length);
+            if (v === '') return lead;
+            let out = lead;
+            const am = v.match(/^[&*]\S+/);
+            if (am) {
+                out += '<span class="anchor">' + esc(am[0]) + '</span>';
+                v = v.slice(am[0].length);
+                if (v === '') return out;
+                const sp = v.match(/^(\s+)/);
+                if (sp) { out += sp[1]; v = v.slice(sp[1].length); }
+                if (v === '') return out;
+            }
+            const bm = v.match(/^[|>][+-]?\d*/);
+            if (bm && (v === bm[0] || /^\s/.test(v.slice(bm[0].length)))) {
+                return out + '<span class="bracket">' + esc(bm[0]) + '</span>' + esc(v.slice(bm[0].length));
+            }
+            return out + highlightInline(esc(v));
+        }
+
+        return code.split('\n').map((line) => {
+            const indent = line.match(/^(\s*)/)[1];
+            let rest = line.slice(indent.length);
+            if (rest === '') return indent;
+            if (rest[0] === '#') return indent + '<span class="comment">' + esc(rest) + '</span>';
+            if (rest === '---' || rest === '...') return indent + '<span class="bracket">' + esc(rest) + '</span>';
+            let prefix = indent;
+            let m;
+            while ((m = rest.match(/^-(\s+|$)/))) {
+                prefix += '<span class="bracket">-</span>' + m[1];
+                rest = rest.slice(m[0].length);
+                if (rest === '') return prefix;
+            }
+            let comment = '';
+            const ci = findInlineComment(rest);
+            if (ci !== -1) { comment = rest.slice(ci); rest = rest.slice(0, ci); }
+            let out = prefix;
+            const colon = findKeyColonLite(rest);
+            if (colon !== -1) {
+                const key = rest.slice(0, colon);
+                const after = rest.slice(colon + 1);
+                const keyLead = key.match(/^(\s*)/)[1];
+                const keyName = key.slice(keyLead.length);
+                out += keyLead + '<span class="key">' + esc(keyName) + '</span>:';
+                out += highlightValue(after);
+            } else {
+                out += highlightValue(rest);
+            }
+            if (comment) out += '<span class="comment">' + esc(comment) + '</span>';
+            return out;
+        }).join('\n');
+    }
+
     // ============ Bookmark ============
     function initBookmark() {
         elements.bookmarkBtn.addEventListener('click', addBookmark);
@@ -3474,6 +4424,7 @@
         initMsgpack();
         initCbor();
         initCompare();
+        initYaml();
         initBookmark();
         initAbout();
         initTheme();
