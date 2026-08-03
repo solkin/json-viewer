@@ -7,8 +7,34 @@
 
     // DOM Elements
     const elements = {
-        tabs: document.querySelectorAll('.tab'),
-        tabPanels: document.querySelectorAll('.tab-panel'),
+        // Shell
+        railBtns: document.querySelectorAll('.rail-btn'),
+        cmdbarDoc: document.getElementById('cmdbar-doc'),
+        cmdbarCompare: document.getElementById('cmdbar-compare'),
+        stageDoc: document.getElementById('stage-doc'),
+        stageCompare: document.getElementById('stage-compare'),
+        compareRow: document.getElementById('compare-row'),
+        auxRead: document.getElementById('aux-read'),
+        auxValidate: document.getElementById('aux-validate'),
+        auxConvert: document.getElementById('aux-convert'),
+        segs: document.querySelectorAll('#format-switch .seg'),
+        toolGroups: document.querySelectorAll('#aux-convert .tool-group'),
+        convPanels: document.querySelectorAll('#aux-convert .conv'),
+        convInfos: document.querySelectorAll('#aux-convert .conv-info'),
+        yamlInfoContent: document.getElementById('yaml-info-content'),
+        sourceWrapBtn: document.getElementById('source-wrap-btn'),
+        splitterDoc: document.getElementById('splitter-doc'),
+        splitterCmp: document.getElementById('splitter-cmp'),
+        splitterDiff: document.getElementById('splitter-diff'),
+        // Status bar
+        sbCursor: document.getElementById('sb-cursor'),
+        sbLines: document.getElementById('sb-lines'),
+        sbSize: document.getElementById('sb-size'),
+        sbNodes: document.getElementById('sb-nodes'),
+        sbMode: document.getElementById('sb-mode'),
+        sbError: document.getElementById('sb-error'),
+        statusbar: document.querySelector('.statusbar'),
+        // Document
         editor: document.getElementById('json-editor'),
         editorScroll: document.getElementById('editor-scroll'),
         syntaxHighlight: document.getElementById('syntax-highlight'),
@@ -68,22 +94,13 @@
         compareResultsContent: document.getElementById('compare-results-content'),
         uploadCompareA: document.getElementById('upload-compare-a'),
         uploadCompareB: document.getElementById('upload-compare-b'),
-        yamlToYamlBtn: document.getElementById('yaml-to-yaml-btn'),
-        yamlToJsonBtn: document.getElementById('yaml-to-json-btn'),
-        yamlFromEditorBtn: document.getElementById('yaml-from-editor-btn'),
         yamlCopyBtn: document.getElementById('yaml-copy-btn'),
         yamlDownloadBtn: document.getElementById('yaml-download-btn'),
-        yamlClearBtn: document.getElementById('yaml-clear-btn'),
         uploadYaml: document.getElementById('upload-yaml'),
-        yamlJsonEditor: document.getElementById('yaml-json-editor'),
         yamlYamlEditor: document.getElementById('yaml-yaml-editor'),
-        yamlJsonLineNumbers: document.getElementById('yaml-json-line-numbers'),
         yamlYamlLineNumbers: document.getElementById('yaml-yaml-line-numbers'),
-        yamlJsonScroll: document.getElementById('yaml-json-scroll'),
         yamlYamlScroll: document.getElementById('yaml-yaml-scroll'),
-        yamlJsonSyntax: document.getElementById('yaml-json-syntax'),
         yamlYamlSyntax: document.getElementById('yaml-yaml-syntax'),
-        yamlErrorJson: document.getElementById('yaml-error-json'),
         yamlErrorYaml: document.getElementById('yaml-error-yaml'),
         toast: document.getElementById('toast'),
         bookmarkBtn: document.getElementById('bookmark-btn'),
@@ -105,95 +122,207 @@
     // LocalStorage keys
     const STORAGE_KEY = 'json-viewer-content';
     const THEME_KEY = 'json-viewer-theme';
+    // Above this the per-line gutter measurement costs more than it is worth
+    const WRAP_ALIGN_MAX_CHARS = 200000;
     const COMPARE_MAX_DIFFS = 500;
 
     let lastCompareReportText = '';
     let compareErrorLineA = null;
     let compareErrorLineB = null;
 
-    let yamlSeeded = false;
     let yamlDebounce = null;
-    let yamlJsonErrorLine = null;
     let yamlYamlErrorLine = null;
+    let yamlSyncing = false;
 
-    // ============ Tab Navigation ============
-    function initTabs() {
-        elements.tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const tabId = tab.dataset.tab;
-                switchTab(tabId);
-            });
+    // ============ Workspace modes & routing ============
+    // The document (main editor) is the single source of truth. Modes are views
+    // over it; only Compare works on its own pair of documents.
+    const MODES = ['read', 'validate', 'convert', 'compare'];
+    const FORMATS = ['yaml', 'bson', 'msgpack', 'cbor'];
+    const MODE_LABELS = { read: 'Read', validate: 'Validate', convert: 'Convert', compare: 'Compare' };
+
+    let currentMode = 'read';
+    let currentFormat = 'yaml';
+    let lastTreeSignature = null;
+    let validatedSnapshot = null;
+
+    function initModes() {
+        elements.railBtns.forEach(btn => {
+            btn.addEventListener('click', () => navigate(btn.dataset.mode));
         });
+        elements.segs.forEach(seg => {
+            seg.addEventListener('click', () => navigate('convert', seg.dataset.format));
+        });
+        window.addEventListener('hashchange', applyHash);
+        applyHash();
     }
 
-    function switchTab(tabId) {
-        elements.tabs.forEach(t => t.classList.remove('active'));
-        elements.tabPanels.forEach(p => p.classList.remove('active'));
-        
-        document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
-        document.getElementById(`${tabId}-tab`).classList.add('active');
-
-        if (tabId === 'viewer') {
-            if (jsonError) {
-                showViewerError(jsonError);
-            } else if (currentJson !== null) {
-                renderTree(currentJson);
-            } else {
-                showViewerEmpty();
-            }
+    function parseHash() {
+        const parts = (window.location.hash || '').replace(/^#\/?/, '').split('/').filter(Boolean);
+        const mode = MODES.indexOf(parts[0]) >= 0 ? parts[0] : 'read';
+        let format = currentFormat;
+        if (mode === 'convert' && FORMATS.indexOf(parts[1]) >= 0) {
+            format = parts[1];
         }
-        
-        if (tabId === 'schema') {
+        return { mode: mode, format: format };
+    }
+
+    function applyHash() {
+        const target = parseHash();
+        setMode(target.mode, target.format);
+
+        // Keep the URL honest when it named a route that does not exist, so it
+        // never disagrees with the mode actually on screen.
+        const canonical = target.mode === 'convert'
+            ? '#/convert/' + target.format
+            : '#/' + target.mode;
+        if (window.location.hash && window.location.hash !== canonical) {
+            window.history.replaceState(null, '', canonical);
+        }
+    }
+
+    function navigate(mode, format) {
+        const hash = mode === 'convert' ? '#/convert/' + (format || currentFormat) : '#/' + mode;
+        if (window.location.hash === hash) {
+            setMode(mode, format);
+        } else {
+            // hashchange drives setMode, so back/forward stay in sync
+            window.location.hash = hash;
+        }
+    }
+
+    function setMode(mode, format) {
+        currentMode = mode;
+        if (format) currentFormat = format;
+
+        elements.railBtns.forEach(b => {
+            const on = b.dataset.mode === mode;
+            b.classList.toggle('active', on);
+            if (on) b.setAttribute('aria-current', 'page');
+            else b.removeAttribute('aria-current');
+        });
+
+        const isCompare = mode === 'compare';
+        elements.stageDoc.hidden = isCompare;
+        elements.stageCompare.hidden = !isCompare;
+        elements.cmdbarDoc.hidden = isCompare;
+        elements.cmdbarCompare.hidden = !isCompare;
+
+        elements.auxRead.hidden = mode !== 'read';
+        elements.auxValidate.hidden = mode !== 'validate';
+        elements.auxConvert.hidden = mode !== 'convert';
+
+        if (mode === 'convert') applyFormat(currentFormat);
+
+        elements.sbMode.textContent = MODE_LABELS[mode];
+        // Compare works on its own two documents, so the working document's
+        // metrics would describe something that is not on screen.
+        elements.statusbar.classList.toggle('doc-hidden', isCompare);
+
+        if (isCompare) {
+            refreshCompareEditor('a');
+            refreshCompareEditor('b');
+        } else {
+            refreshActiveView();
+        }
+    }
+
+    function applyFormat(format) {
+        currentFormat = format;
+        elements.segs.forEach(s => {
+            const on = s.dataset.format === format;
+            s.classList.toggle('active', on);
+            s.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        elements.toolGroups.forEach(g => { g.hidden = g.dataset.format !== format; });
+        elements.convPanels.forEach(p => { p.hidden = p.dataset.format !== format; });
+        elements.convInfos.forEach(p => { p.hidden = p.dataset.format !== format; });
+    }
+
+    // Re-render whatever the active mode shows. Called after every validation
+    // pass, which is what makes the aux pane live rather than tab-gated.
+    function refreshActiveView() {
+        if (currentMode === 'read') {
+            refreshTreeView();
+        } else if (currentMode === 'validate') {
+            refreshValidateView();
+        } else if (currentMode === 'convert') {
+            refreshConvertView();
+        }
+    }
+
+    function refreshTreeView() {
+        if (jsonError) {
+            lastTreeSignature = null;
+            showViewerError(jsonError);
+            return;
+        }
+        if (currentJson === null) {
+            lastTreeSignature = null;
+            showViewerEmpty();
+            return;
+        }
+        // Skip the re-render when only whitespace changed, so an expanded tree
+        // does not collapse while the user is formatting.
+        let signature;
+        try {
+            signature = JSON.stringify(currentJson);
+        } catch (e) {
+            signature = null;
+        }
+        if (signature !== null && signature === lastTreeSignature) return;
+        lastTreeSignature = signature;
+        renderTree(currentJson);
+    }
+
+    function refreshValidateView() {
+        retireStaleVerdict();
+
+        if (currentJson === null && !elements.schemaEditor.value.trim()) {
             if (jsonError) {
                 showSchemaError(jsonError);
-            } else if (currentJson !== null) {
-                renderSchema(currentJson);
             } else {
                 showSchemaEmpty();
             }
+            return;
         }
-        
-        if (tabId === 'bson') {
-            if (jsonError) {
-                showBsonError(jsonError);
-            } else if (currentJson !== null) {
-                renderBson(currentJson);
-            } else {
-                showBsonEmpty();
-            }
-        }
-        
-        if (tabId === 'msgpack') {
-            if (jsonError) {
-                showMsgpackError(jsonError);
-            } else if (currentJson !== null) {
-                renderMsgpack(currentJson);
-            } else {
-                showMsgpackEmpty();
-            }
-        }
-        
-        if (tabId === 'cbor') {
-            if (jsonError) {
-                showCborError(jsonError);
-            } else if (currentJson !== null) {
-                renderCbor(currentJson);
-            } else {
-                showCborEmpty();
-            }
-        }
-
-        if (tabId === 'yaml') {
-            // On first open, seed the JSON pane from the main editor and convert.
-            if (!yamlSeeded && !elements.yamlJsonEditor.value.trim() && elements.editor.value.trim()) {
-                elements.yamlJsonEditor.value = elements.editor.value;
-                refreshYamlEditor('json');
-                convertYaml('to-yaml', true);
-            }
-            yamlSeeded = true;
+        // Seed a schema the first time there is a document but no schema yet.
+        if (!elements.schemaEditor.value.trim() && currentJson !== null) {
+            renderSchema(currentJson);
         }
     }
-    
+
+    // A verdict only describes the document and schema it was run against.
+    function retireStaleVerdict() {
+        if (validatedSnapshot === null) return;
+        const now = elements.editor.value + ' ' + elements.schemaEditor.value.trim();
+        if (now === validatedSnapshot) return;
+        validatedSnapshot = null;
+        clearValidationResult();
+    }
+
+    function refreshConvertView() {
+        if (currentFormat === 'yaml') {
+            syncYamlFromDocument();
+            return;
+        }
+        const renderers = {
+            bson: [renderBson, showBsonError, showBsonEmpty],
+            msgpack: [renderMsgpack, showMsgpackError, showMsgpackEmpty],
+            cbor: [renderCbor, showCborError, showCborEmpty]
+        };
+        const set = renderers[currentFormat];
+        if (!set) return;
+        if (jsonError) {
+            set[1](jsonError);
+        } else if (currentJson !== null) {
+            set[0](currentJson);
+        } else {
+            set[2]();
+        }
+    }
+
+
     function showViewerError(error) {
         elements.treeContent.innerHTML = `
             <div class="empty-state error-state">
@@ -247,8 +376,9 @@
     function initEditor() {
         elements.editor.addEventListener('input', handleEditorInput);
         elements.editor.addEventListener('keydown', handleKeyDown);
-        elements.editor.addEventListener('click', scrollToCaret);
-        elements.editor.addEventListener('keyup', scrollToCaret);
+        elements.editor.addEventListener('click', onCaretMove);
+        elements.editor.addEventListener('keyup', onCaretMove);
+        elements.editor.addEventListener('select', updateCursorStatus);
         elements.editorScroll.addEventListener('scroll', syncLineNumbers, { passive: true });
         
         // Click anywhere in scroll area focuses editor
@@ -261,26 +391,251 @@
         elements.downloadJsonBtn.addEventListener('click', downloadJson);
         elements.uploadJsonInput.addEventListener('change', uploadJson);
 
+        // Character width depends on the loaded webfont, not the fallback
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(() => { editorMetrics = null; });
+        }
+
         // Initial state
         updateLineNumbers();
         updateSyntaxHighlight();
+    }
+
+    function onCaretMove() {
+        scrollToCaret();
+        updateCursorStatus();
+    }
+
+    // ============ Panes: splitters, drawers, wrap ============
+    function initSplitters() {
+        bindSplitter(elements.splitterDoc, elements.stageDoc, 'x', '--source-w', 'jv-split-doc');
+        bindSplitter(elements.splitterCmp, elements.compareRow, 'x', '--cmp-w', 'jv-split-cmp');
+        bindSplitter(elements.splitterDiff, elements.stageCompare, 'y', '--cmp-h', 'jv-split-diff');
+    }
+
+    function bindSplitter(handle, container, axis, varName, storeKey) {
+        if (!handle || !container) return;
+
+        const MIN = 15;
+        const MAX = 85;
+        let dragging = false;
+
+        try {
+            const saved = localStorage.getItem(storeKey);
+            if (saved) container.style.setProperty(varName, saved);
+        } catch (e) { /* storage unavailable */ }
+
+        handle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            dragging = true;
+            handle.classList.add('dragging');
+            document.body.classList.add('resizing');
+        });
+
+        handle.addEventListener('dblclick', () => {
+            setPercent(50);
+        });
+
+        // The handle is focusable, so it has to be operable from the keyboard too.
+        handle.addEventListener('keydown', (e) => {
+            const back = axis === 'x' ? 'ArrowLeft' : 'ArrowUp';
+            const forward = axis === 'x' ? 'ArrowRight' : 'ArrowDown';
+            let next = null;
+
+            if (e.key === back) next = currentPercent() - (e.shiftKey ? 10 : 2);
+            else if (e.key === forward) next = currentPercent() + (e.shiftKey ? 10 : 2);
+            else if (e.key === 'Home') next = 50;
+            else return;
+
+            e.preventDefault();
+            setPercent(next);
+        });
+
+        function currentPercent() {
+            const raw = parseFloat(container.style.getPropertyValue(varName));
+            return isNaN(raw) ? 50 : raw;
+        }
+
+        function setPercent(value) {
+            const pct = Math.min(MAX, Math.max(MIN, value));
+            const text = pct.toFixed(2) + '%';
+            container.style.setProperty(varName, text);
+            handle.setAttribute('aria-valuenow', Math.round(pct));
+            persist(text);
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const rect = container.getBoundingClientRect();
+            const raw = axis === 'x'
+                ? ((e.clientX - rect.left) / rect.width) * 100
+                : ((e.clientY - rect.top) / rect.height) * 100;
+            const pct = Math.min(MAX, Math.max(MIN, raw)).toFixed(2) + '%';
+            container.style.setProperty(varName, pct);
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove('dragging');
+            document.body.classList.remove('resizing');
+            persist(container.style.getPropertyValue(varName));
+        });
+
+        function persist(value) {
+            try {
+                localStorage.setItem(storeKey, value);
+            } catch (e) { /* storage unavailable */ }
+        }
+    }
+
+    function initDrawers() {
+        document.querySelectorAll('.drawer-head').forEach(head => {
+            const drawer = head.closest('.drawer');
+            if (!drawer) return;
+            const key = 'jv-drawer-' + drawer.id;
+
+            try {
+                const stored = localStorage.getItem(key);
+                if (stored === '1') drawer.classList.add('collapsed');
+                else if (stored === '0') drawer.classList.remove('collapsed');
+            } catch (e) { /* storage unavailable */ }
+
+            syncAria();
+            head.addEventListener('click', () => {
+                drawer.classList.toggle('collapsed');
+                syncAria();
+                try {
+                    localStorage.setItem(key, drawer.classList.contains('collapsed') ? '1' : '0');
+                } catch (e) { /* storage unavailable */ }
+            });
+
+            function syncAria() {
+                head.setAttribute('aria-expanded', drawer.classList.contains('collapsed') ? 'false' : 'true');
+            }
+        });
+    }
+
+    function initWrap() {
+        const container = elements.editor.closest('.editor-container');
+        if (!container || !elements.sourceWrapBtn) return;
+
+        let wrapped = false;
+        try {
+            wrapped = localStorage.getItem('jv-wrap') === '1';
+        } catch (e) { /* storage unavailable */ }
+
+        apply();
+        elements.sourceWrapBtn.addEventListener('click', () => {
+            wrapped = !wrapped;
+            apply();
+            try {
+                localStorage.setItem('jv-wrap', wrapped ? '1' : '0');
+            } catch (e) { /* storage unavailable */ }
+        });
+
+        // Re-wrapping changes how tall each line is, so the gutter has to be
+        // re-measured whenever the pane width changes.
+        if (window.ResizeObserver) {
+            let pending = false;
+            const observer = new ResizeObserver(() => {
+                if (pending) return;
+                pending = true;
+                requestAnimationFrame(() => {
+                    pending = false;
+                    alignGutterToWrap();
+                });
+            });
+            observer.observe(elements.editorScroll);
+        }
+
+        function apply() {
+            container.classList.toggle('wrap', wrapped);
+            elements.sourceWrapBtn.classList.toggle('active', wrapped);
+            elements.sourceWrapBtn.title = wrapped ? 'Word wrap: on' : 'Word wrap: off';
+            updateLineNumbers();
+            updateSyntaxHighlight();
+        }
+    }
+
+    function initShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Mode switching is bound to Alt+digit, not Ctrl/Cmd+digit: browsers
+            // reserve Ctrl+1..8 (and Cmd+1..8 on macOS) for tab switching and do
+            // not let a page cancel it. Ctrl is accepted too for the platforms
+            // where it happens to be free.
+            // Matched on e.code, because Option+3 on macOS reports e.key as '£'
+            // and non-Latin layouts remap e.key as well.
+            const modeIndex = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+            if (modeIndex >= 0 && (e.altKey || e.ctrlKey) && !e.metaKey && !e.shiftKey) {
+                e.preventDefault();
+                navigate(MODES[modeIndex]);
+                return;
+            }
+
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+                e.preventDefault();
+                formatJson();
+            }
+        });
     }
 
     function handleEditorInput() {
         // Instant visual updates
         updateLineNumbers();
         updateSyntaxHighlight();
-        
+        updateCursorStatus();
+
         // Ensure caret is visible
         scrollToCaret();
-        
+
         // Debounce only JSON validation
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(validateJson, 250);
-        
+
         // Debounce localStorage save (1 sec)
         clearTimeout(saveTimer);
         saveTimer = setTimeout(saveToStorage, 1000);
+    }
+
+    // ============ Status bar ============
+    function updateStatusBar() {
+        const value = elements.editor.value;
+        const lineCount = value === '' ? 0 : value.split('\n').length;
+        const byteCount = new TextEncoder().encode(value).length;
+
+        elements.sbLines.textContent = lineCount + (lineCount === 1 ? ' line' : ' lines');
+        elements.sbSize.textContent = formatBytes(byteCount);
+
+        const nodeCount = currentJson === null ? 0 : countNodes(currentJson);
+        elements.sbNodes.textContent = nodeCount + (nodeCount === 1 ? ' node' : ' nodes');
+
+        if (jsonError) {
+            elements.sbError.hidden = false;
+            elements.sbError.textContent = jsonError;
+        } else {
+            elements.sbError.hidden = true;
+            elements.sbError.textContent = '';
+        }
+    }
+
+    function updateCursorStatus() {
+        const pos = elements.editor.selectionStart;
+        const before = elements.editor.value.substring(0, pos).split('\n');
+        elements.sbCursor.textContent = 'Ln ' + before.length + ', Col ' + (before[before.length - 1].length + 1);
+    }
+
+    function countNodes(value) {
+        if (value === null || typeof value !== 'object') return 1;
+        let total = 1;
+        if (Array.isArray(value)) {
+            for (let i = 0; i < value.length; i++) total += countNodes(value[i]);
+        } else {
+            for (const key in value) {
+                if (Object.prototype.hasOwnProperty.call(value, key)) total += countNodes(value[key]);
+            }
+        }
+        return total;
     }
     
     function saveToStorage() {
@@ -309,71 +664,89 @@
         }
     }
     
-    function scrollToCaret() {
-        const editor = elements.editor;
-        const scroll = elements.editorScroll;
-        
-        // Get caret position
+    // Editor geometry is measured, not assumed: the whole UI scales from
+    // --ui-scale, so hard-coded 12px/7.2px constants drift the moment it moves.
+    let editorMetrics = null;
+
+    function getEditorMetrics(el) {
+        if (editorMetrics) return editorMetrics;
+
+        const cs = getComputedStyle(el);
+        const fontSize = parseFloat(cs.fontSize) || 12;
+        let lineHeight = parseFloat(cs.lineHeight);
+        if (isNaN(lineHeight)) lineHeight = fontSize * 1.5;
+
+        const probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;top:-9999px';
+        probe.style.font = cs.font;
+        probe.style.fontFamily = cs.fontFamily;
+        probe.style.fontSize = cs.fontSize;
+        probe.textContent = '0'.repeat(100);
+        document.body.appendChild(probe);
+        const charWidth = probe.getBoundingClientRect().width / 100;
+        probe.remove();
+
+        editorMetrics = {
+            lineHeight: lineHeight,
+            charWidth: charWidth || fontSize * 0.6,
+            padTop: parseFloat(cs.paddingTop) || 0,
+            padLeft: parseFloat(cs.paddingLeft) || 0
+        };
+        return editorMetrics;
+    }
+
+    function ensureCaretVisible(editor, scroll, syntaxEl) {
+        const m = getEditorMetrics(editor);
         const pos = editor.selectionStart;
-        const textBeforeCaret = editor.value.substring(0, pos);
-        const lines = textBeforeCaret.split('\n');
-        const lineNum = lines.length;
-        const colNum = lines[lines.length - 1].length;
-        
-        // Calculate approximate pixel positions
-        const lineHeight = 12 * 1.5; // font-size * line-height
-        const charWidth = 7.2; // approximate char width for monospace 12px
-        const padding = 8;
-        
-        const caretTop = (lineNum - 1) * lineHeight + padding;
-        const caretLeft = colNum * charWidth + padding;
-        
-        // Scroll if caret is out of view
+        const before = editor.value.substring(0, pos).split('\n');
+        const lineNum = before.length;
+        const colNum = before[before.length - 1].length;
+
+        const wrapped = isWrapped(editor);
+        let caretTop = (lineNum - 1) * m.lineHeight + m.padTop;
+
+        if (wrapped) {
+            // A wrapped line is taller than one row, so read its real offset from
+            // the rendered block. Very large documents render without per-line
+            // blocks; there the uniform estimate above is the best available.
+            const rows = syntaxEl ? syntaxEl.children : null;
+            const row = rows && rows[lineNum - 1];
+            if (row && row.classList.contains('row')) caretTop = row.offsetTop;
+        }
+
         const viewTop = scroll.scrollTop;
         const viewBottom = viewTop + scroll.clientHeight;
+
+        if (caretTop < viewTop + m.padTop) {
+            scroll.scrollTop = caretTop - m.padTop;
+        } else if (caretTop + m.lineHeight > viewBottom - m.padTop) {
+            scroll.scrollTop = caretTop + m.lineHeight - scroll.clientHeight + m.padTop;
+        }
+
+        // Wrapped text never scrolls sideways
+        if (wrapped) return;
+
+        const caretLeft = colNum * m.charWidth + m.padLeft;
         const viewLeft = scroll.scrollLeft;
         const viewRight = viewLeft + scroll.clientWidth;
-        
-        if (caretTop < viewTop + padding) {
-            scroll.scrollTop = caretTop - padding;
-        } else if (caretTop + lineHeight > viewBottom - padding) {
-            scroll.scrollTop = caretTop + lineHeight - scroll.clientHeight + padding;
-        }
-        
-        if (caretLeft < viewLeft + padding) {
-            scroll.scrollLeft = caretLeft - padding;
-        } else if (caretLeft > viewRight - padding * 2) {
-            scroll.scrollLeft = caretLeft - scroll.clientWidth + padding * 2;
+
+        if (caretLeft < viewLeft + m.padLeft) {
+            scroll.scrollLeft = caretLeft - m.padLeft;
+        } else if (caretLeft > viewRight - m.padLeft * 2) {
+            scroll.scrollLeft = caretLeft - scroll.clientWidth + m.padLeft * 2;
         }
     }
 
+    function scrollToCaret() {
+        ensureCaretVisible(elements.editor, elements.editorScroll, elements.syntaxHighlight);
+    }
+
     function scrollToCaretCompare(side) {
-        const editor = side === 'a' ? elements.compareJsonA : elements.compareJsonB;
-        const scroll = side === 'a' ? elements.compareScrollA : elements.compareScrollB;
-        const pos = editor.selectionStart;
-        const textBeforeCaret = editor.value.substring(0, pos);
-        const lines = textBeforeCaret.split('\n');
-        const lineNum = lines.length;
-        const colNum = lines[lines.length - 1].length;
-        const lineHeight = 12 * 1.5;
-        const charWidth = 7.2;
-        const padding = 8;
-        const caretTop = (lineNum - 1) * lineHeight + padding;
-        const caretLeft = colNum * charWidth + padding;
-        const viewTop = scroll.scrollTop;
-        const viewBottom = viewTop + scroll.clientHeight;
-        const viewLeft = scroll.scrollLeft;
-        const viewRight = viewLeft + scroll.clientWidth;
-        if (caretTop < viewTop + padding) {
-            scroll.scrollTop = caretTop - padding;
-        } else if (caretTop + lineHeight > viewBottom - padding) {
-            scroll.scrollTop = caretTop + lineHeight - scroll.clientHeight + padding;
-        }
-        if (caretLeft < viewLeft + padding) {
-            scroll.scrollLeft = caretLeft - padding;
-        } else if (caretLeft > viewRight - padding * 2) {
-            scroll.scrollLeft = caretLeft - scroll.clientWidth + padding * 2;
-        }
+        ensureCaretVisible(
+            side === 'a' ? elements.compareJsonA : elements.compareJsonB,
+            side === 'a' ? elements.compareScrollA : elements.compareScrollB,
+            null
+        );
     }
 
     function refreshCompareEditor(side) {
@@ -414,10 +787,12 @@
 
     function updateLineNumbers() {
         updateLineNumbersFor(elements.editor, elements.lineNumbers, errorLine);
+        alignGutterToWrap();
     }
 
     function updateSyntaxHighlight() {
         updateSyntaxHighlightFor(elements.editor, elements.syntaxHighlight, errorLine);
+        alignGutterToWrap();
     }
 
     function highlightSyntax(code) {
@@ -473,15 +848,65 @@
             syntaxEl.textContent = code + '\n';
             return;
         }
-        let html = highlightSyntax(code);
-        if (errorLineNum !== null) {
-            const lines = html.split('\n');
-            if (errorLineNum >= 1 && errorLineNum <= lines.length) {
-                lines[errorLineNum - 1] = `<span class="error-line">${lines[errorLineNum - 1]}</span>`;
-                html = lines.join('\n');
-            }
+        const html = highlightSyntax(code);
+        const container = syntaxEl.closest('.editor-container');
+
+        // In wrap mode every logical line becomes its own block so the gutter can
+        // measure how many visual rows it actually occupies. No highlight token
+        // spans a newline, so splitting on '\n' cannot break the markup.
+        // Past a certain size the per-line measurement costs more than the gutter
+        // is worth, so fall back to plain wrapping with the gutter hidden.
+        if (isWrapped(syntaxEl)) {
+            const tooBig = code.length > WRAP_ALIGN_MAX_CHARS;
+            if (container) container.classList.toggle('wrap-plain', tooBig);
+            syntaxEl.innerHTML = tooBig
+                ? markErrorLine(html, errorLineNum) + '\n'
+                : toWrappedRows(html, errorLineNum);
+            return;
         }
-        syntaxEl.innerHTML = html + '\n';
+
+        if (container) container.classList.remove('wrap-plain');
+        syntaxEl.innerHTML = markErrorLine(html, errorLineNum) + '\n';
+    }
+
+    function markErrorLine(html, errorLineNum) {
+        if (errorLineNum === null) return html;
+        const lines = html.split('\n');
+        if (errorLineNum < 1 || errorLineNum > lines.length) return html;
+        lines[errorLineNum - 1] = `<span class="error-line">${lines[errorLineNum - 1]}</span>`;
+        return lines.join('\n');
+    }
+
+    function toWrappedRows(html, errorLineNum) {
+        return html.split('\n').map((line, i) => {
+            const cls = (i + 1) === errorLineNum ? 'row error-line' : 'row';
+            return `<span class="${cls}">${line}</span>`;
+        }).join('');
+    }
+
+    function isWrapped(el) {
+        const container = el.closest('.editor-container');
+        return !!container && container.classList.contains('wrap');
+    }
+
+    // Give each gutter number the height its logical line really renders at, so
+    // the number stays pinned to the line's first visual row. The gutter is
+    // rebuilt from scratch by updateLineNumbersFor, so no inline height ever
+    // needs clearing here.
+    function alignGutterToWrap() {
+        if (!isWrapped(elements.syntaxHighlight)) return;
+
+        const rows = elements.syntaxHighlight.children;
+        const numbers = elements.lineNumbers.children;
+        // Mismatched counts mean one half is mid-update, or the document is too
+        // large and rendered without per-line blocks; the next call fixes it.
+        if (!rows.length || rows.length !== numbers.length) return;
+
+        // Read every height, then write every height. Interleaving the two forces
+        // a full layout per line and locks the tab up on large documents.
+        const heights = new Array(rows.length);
+        for (let i = 0; i < rows.length; i++) heights[i] = rows[i].offsetHeight;
+        for (let i = 0; i < numbers.length; i++) numbers[i].style.height = heights[i] + 'px';
     }
 
     function validateJson() {
@@ -494,6 +919,8 @@
             errorLine = null;
             updateLineNumbers();
             updateSyntaxHighlight();
+            updateStatusBar();
+            refreshActiveView();
             return;
         }
 
@@ -512,6 +939,9 @@
             updateLineNumbers();
             updateSyntaxHighlight();
         }
+
+        updateStatusBar();
+        refreshActiveView();
     }
 
     function getErrorLine(errorMessage, code) {
@@ -969,6 +1399,7 @@
         // Schema editor input handling
         elements.schemaEditor.addEventListener('input', () => {
             updateSchemaDisplay();
+            retireStaleVerdict();
             debounce(() => updateSchemaStats(), 300)();
         });
         
@@ -1116,6 +1547,7 @@
     }
     
     function clearValidationResult() {
+        validatedSnapshot = null;
         elements.validationContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">pending</span>
@@ -1125,12 +1557,17 @@
     
     function validateJsonAgainstSchema() {
         const schemaText = elements.schemaEditor.value.trim();
-        
+
         if (!schemaText) {
             showToast('No schema to validate against', 'error');
             return;
         }
-        
+
+        // Remember what was judged, so the verdict can be retired once either
+        // side changes. The source pane is visible next to this report now, so a
+        // stale "valid" would be read as current.
+        validatedSnapshot = elements.editor.value + ' ' + schemaText;
+
         let schema;
         try {
             schema = JSON.parse(schemaText);
@@ -2006,9 +2443,7 @@
                 // Update the JSON editor
                 elements.editor.value = JSON.stringify(decoded, null, 2);
                 handleEditorInput();
-                
-                // Switch to JSON tab
-                switchTab('json');
+
                 showToast('BSON loaded successfully', 'success');
             } catch (err) {
                 showToast('Failed to parse BSON: ' + err.message, 'error');
@@ -2491,9 +2926,7 @@
                 // Update the JSON editor
                 elements.editor.value = JSON.stringify(decoded, null, 2);
                 handleEditorInput();
-                
-                // Switch to JSON tab
-                switchTab('json');
+
                 showToast('MsgPack loaded successfully', 'success');
             } catch (err) {
                 showToast('Failed to parse MsgPack: ' + err.message, 'error');
@@ -2887,9 +3320,7 @@
                 // Update the JSON editor
                 elements.editor.value = JSON.stringify(decoded, null, 2);
                 handleEditorInput();
-                
-                // Switch to JSON tab
-                switchTab('json');
+
                 showToast('CBOR loaded successfully', 'success');
             } catch (err) {
                 showToast('Failed to parse CBOR: ' + err.message, 'error');
@@ -3955,193 +4386,204 @@
         return { stringify: stringify, parse: parse };
     })();
 
+    // The YAML pane is a live two-way view of the document: the JSON side of the
+    // old converter is now the main source editor, so nothing has to be copied
+    // across by hand.
     function initYaml() {
-        elements.yamlToYamlBtn.addEventListener('click', () => convertYaml('to-yaml', false));
-        elements.yamlToJsonBtn.addEventListener('click', () => convertYaml('to-json', false));
-        elements.yamlFromEditorBtn.addEventListener('click', () => {
-            elements.yamlJsonEditor.value = elements.editor.value;
-            hideYamlError('json');
-            refreshYamlEditor('json');
-            convertYaml('to-yaml', true);
-            showToast('Pulled JSON from editor', 'success');
-        });
         elements.yamlCopyBtn.addEventListener('click', copyYamlOutput);
         elements.yamlDownloadBtn.addEventListener('click', downloadYaml);
-        elements.yamlClearBtn.addEventListener('click', clearYaml);
         elements.uploadYaml.addEventListener('change', uploadYamlFile);
 
-        elements.yamlJsonEditor.addEventListener('input', () => onYamlInput('json'));
-        elements.yamlYamlEditor.addEventListener('input', () => onYamlInput('yaml'));
-        elements.yamlJsonEditor.addEventListener('keydown', handleYamlKeyDown);
+        elements.yamlYamlEditor.addEventListener('input', onYamlInput);
         elements.yamlYamlEditor.addEventListener('keydown', handleYamlKeyDown);
-        elements.yamlJsonEditor.addEventListener('click', () => scrollToCaretYaml('json'));
-        elements.yamlJsonEditor.addEventListener('keyup', () => scrollToCaretYaml('json'));
         elements.yamlYamlEditor.addEventListener('click', () => scrollToCaretYaml('yaml'));
         elements.yamlYamlEditor.addEventListener('keyup', () => scrollToCaretYaml('yaml'));
-        elements.yamlJsonScroll.addEventListener('scroll', () => syncYamlLineNumbers('json'), { passive: true });
         elements.yamlYamlScroll.addEventListener('scroll', () => syncYamlLineNumbers('yaml'), { passive: true });
-        elements.yamlJsonScroll.addEventListener('click', () => elements.yamlJsonEditor.focus());
         elements.yamlYamlScroll.addEventListener('click', () => elements.yamlYamlEditor.focus());
 
-        refreshYamlEditor('json');
         refreshYamlEditor('yaml');
     }
 
-    function onYamlInput(which) {
-        hideYamlError(which);
-        refreshYamlEditor(which);
-        scrollToCaretYaml(which);
+    function onYamlInput() {
+        hideYamlError('yaml');
+        refreshYamlEditor('yaml');
+        scrollToCaretYaml('yaml');
         clearTimeout(yamlDebounce);
-        yamlDebounce = setTimeout(() => convertYaml(which === 'json' ? 'to-yaml' : 'to-json', true), 300);
+        yamlDebounce = setTimeout(applyYamlToDocument, 300);
     }
 
     function handleYamlKeyDown(e) {
         if (e.key !== 'Tab') return;
         e.preventDefault();
         const ta = e.target;
-        const which = ta === elements.yamlJsonEditor ? 'json' : 'yaml';
         const start = ta.selectionStart;
         const end = ta.selectionEnd;
         ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
         ta.selectionStart = ta.selectionEnd = start + 2;
-        hideYamlError(which);
-        refreshYamlEditor(which);
+        hideYamlError('yaml');
+        refreshYamlEditor('yaml');
         clearTimeout(yamlDebounce);
-        yamlDebounce = setTimeout(() => convertYaml(which === 'json' ? 'to-yaml' : 'to-json', true), 300);
+        yamlDebounce = setTimeout(applyYamlToDocument, 300);
     }
 
-    function convertYaml(direction, silent) {
-        if (direction === 'to-yaml') {
-            const text = elements.yamlJsonEditor.value;
-            if (!text.trim()) {
-                elements.yamlYamlEditor.value = '';
-                hideYamlError('json');
-                refreshYamlEditor('yaml');
-                if (!silent) showToast('Enter JSON to convert', 'error');
-                return;
-            }
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch (err) {
-                const msg = err.message || 'Invalid JSON';
-                yamlJsonErrorLine = getErrorLine(msg, text);
-                showYamlError('json', msg);
-                refreshYamlEditor('json');
-                return;
-            }
-            hideYamlError('json');
-            refreshYamlEditor('json');
-            let out;
-            try {
-                out = YAML.stringify(data);
-            } catch (err) {
-                showYamlError('json', err.message || 'Could not serialize to YAML');
-                return;
-            }
-            elements.yamlYamlEditor.value = out;
+    // Document -> YAML
+    function syncYamlFromDocument() {
+        if (yamlSyncing) return;
+
+        if (!elements.editor.value.trim()) {
+            yamlSyncing = true;
+            elements.yamlYamlEditor.value = '';
+            yamlYamlErrorLine = null;
             hideYamlError('yaml');
             refreshYamlEditor('yaml');
-            if (!silent) showToast('Converted to YAML', 'success');
-        } else {
-            const text = elements.yamlYamlEditor.value;
-            if (!text.trim()) {
-                elements.yamlJsonEditor.value = '';
-                hideYamlError('yaml');
-                refreshYamlEditor('json');
-                if (!silent) showToast('Enter YAML to convert', 'error');
-                return;
-            }
-            let data;
-            try {
-                data = YAML.parse(text);
-            } catch (err) {
-                const msg = err.message || 'Invalid YAML';
-                const m = msg.match(/\(line (\d+)\)/);
-                yamlYamlErrorLine = m ? parseInt(m[1], 10) : null;
-                showYamlError('yaml', msg);
-                refreshYamlEditor('yaml');
-                return;
-            }
-            hideYamlError('yaml');
-            refreshYamlEditor('yaml');
-            elements.yamlJsonEditor.value = JSON.stringify(data, null, 2);
-            hideYamlError('json');
-            refreshYamlEditor('json');
-            if (!silent) showToast('Converted to JSON', 'success');
+            yamlSyncing = false;
+            renderYamlStats(null);
+            return;
         }
+
+        if (jsonError) {
+            showYamlError('yaml', 'Document is not valid JSON — fix it in the source pane');
+            renderYamlStats(null);
+            return;
+        }
+
+        let out;
+        try {
+            out = YAML.stringify(currentJson);
+        } catch (err) {
+            showYamlError('yaml', err.message || 'Could not serialize to YAML');
+            renderYamlStats(null);
+            return;
+        }
+
+        yamlSyncing = true;
+        elements.yamlYamlEditor.value = out;
+        yamlYamlErrorLine = null;
+        hideYamlError('yaml');
+        refreshYamlEditor('yaml');
+        yamlSyncing = false;
+        renderYamlStats(out);
+    }
+
+    // YAML -> document
+    function applyYamlToDocument() {
+        const text = elements.yamlYamlEditor.value;
+        if (!text.trim()) return;
+
+        let data;
+        try {
+            data = YAML.parse(text);
+        } catch (err) {
+            const msg = err.message || 'Invalid YAML';
+            const m = msg.match(/\(line (\d+)\)/);
+            yamlYamlErrorLine = m ? parseInt(m[1], 10) : null;
+            showYamlError('yaml', msg);
+            refreshYamlEditor('yaml');
+            return;
+        }
+
+        hideYamlError('yaml');
+        yamlYamlErrorLine = null;
+        refreshYamlEditor('yaml');
+
+        yamlSyncing = true;
+        elements.editor.value = JSON.stringify(data, null, 2);
+        updateLineNumbers();
+        updateSyntaxHighlight();
+        updateCursorStatus();
+        validateJson();
+        saveToStorage();
+        yamlSyncing = false;
+
+        renderYamlStats(text);
+    }
+
+    function renderYamlStats(yamlText) {
+        if (!elements.yamlInfoContent) return;
+
+        if (!yamlText || currentJson === null) {
+            elements.yamlInfoContent.innerHTML = `
+                <div class="empty-state">
+                    <span class="material-icons">compare_arrows</span>
+                    <p>Size statistics appear once the document converts</p>
+                </div>`;
+            return;
+        }
+
+        const encoder = new TextEncoder();
+        const jsonSize = encoder.encode(JSON.stringify(currentJson)).length;
+        const yamlSize = encoder.encode(yamlText).length;
+        const maxSize = Math.max(jsonSize, yamlSize, 1);
+        const diff = jsonSize - yamlSize;
+        const diffPercent = jsonSize > 0 ? Math.abs((diff / jsonSize) * 100).toFixed(1) : '0.0';
+        const isSmaller = diff > 0;
+
+        elements.yamlInfoContent.innerHTML = `
+            <div class="size-comparison">
+                <div class="size-bar-container">
+                    <div class="size-bar-label">
+                        <span class="label">JSON</span>
+                        <span class="value">${formatBytes(jsonSize)}</span>
+                    </div>
+                    <div class="size-bar">
+                        <div class="size-bar-fill json" style="width: ${(jsonSize / maxSize * 100).toFixed(0)}%"></div>
+                    </div>
+                </div>
+                <div class="size-bar-container">
+                    <div class="size-bar-label">
+                        <span class="label">YAML</span>
+                        <span class="value">${formatBytes(yamlSize)}</span>
+                    </div>
+                    <div class="size-bar">
+                        <div class="size-bar-fill yaml" style="width: ${(yamlSize / maxSize * 100).toFixed(0)}%"></div>
+                    </div>
+                </div>
+                <div class="size-diff">
+                    <div class="diff-value ${isSmaller ? 'positive' : 'negative'}">
+                        ${isSmaller ? '-' : '+'}${formatBytes(Math.abs(diff))} (${diffPercent}%)
+                    </div>
+                    <div class="diff-label">${isSmaller ? 'YAML smaller' : 'YAML larger'}</div>
+                </div>
+            </div>
+            <div class="detail-section">
+                <div class="detail-label">Format details</div>
+                <div class="detail-value" style="font-size: 10px;">
+                    YAML 1.2 core schema — block &amp; flow styles, anchors and merge keys are understood on input. Editing this pane rewrites the document.
+                </div>
+            </div>`;
     }
 
     function refreshYamlEditor(which) {
-        if (which === 'json') {
-            updateLineNumbersFor(elements.yamlJsonEditor, elements.yamlJsonLineNumbers, yamlJsonErrorLine);
-            updateSyntaxHighlightFor(elements.yamlJsonEditor, elements.yamlJsonSyntax, yamlJsonErrorLine);
-        } else {
-            updateLineNumbersFor(elements.yamlYamlEditor, elements.yamlYamlLineNumbers, yamlYamlErrorLine);
-            let html = highlightYaml(elements.yamlYamlEditor.value);
-            if (yamlYamlErrorLine !== null) {
-                const ls = html.split('\n');
-                if (yamlYamlErrorLine >= 1 && yamlYamlErrorLine <= ls.length) {
-                    ls[yamlYamlErrorLine - 1] = '<span class="error-line">' + ls[yamlYamlErrorLine - 1] + '</span>';
-                    html = ls.join('\n');
-                }
+        if (which !== 'yaml') return;
+        updateLineNumbersFor(elements.yamlYamlEditor, elements.yamlYamlLineNumbers, yamlYamlErrorLine);
+        let html = highlightYaml(elements.yamlYamlEditor.value);
+        if (yamlYamlErrorLine !== null) {
+            const ls = html.split('\n');
+            if (yamlYamlErrorLine >= 1 && yamlYamlErrorLine <= ls.length) {
+                ls[yamlYamlErrorLine - 1] = '<span class="error-line">' + ls[yamlYamlErrorLine - 1] + '</span>';
+                html = ls.join('\n');
             }
-            elements.yamlYamlSyntax.innerHTML = html + '\n';
         }
+        elements.yamlYamlSyntax.innerHTML = html + '\n';
     }
 
-    function syncYamlLineNumbers(which) {
-        if (which === 'json') {
-            elements.yamlJsonLineNumbers.scrollTop = elements.yamlJsonScroll.scrollTop;
-        } else {
-            elements.yamlYamlLineNumbers.scrollTop = elements.yamlYamlScroll.scrollTop;
-        }
+    function syncYamlLineNumbers() {
+        elements.yamlYamlLineNumbers.scrollTop = elements.yamlYamlScroll.scrollTop;
     }
 
-    function scrollToCaretYaml(which) {
-        const editor = which === 'json' ? elements.yamlJsonEditor : elements.yamlYamlEditor;
-        const scroll = which === 'json' ? elements.yamlJsonScroll : elements.yamlYamlScroll;
-        const pos = editor.selectionStart;
-        const before = editor.value.substring(0, pos).split('\n');
-        const lineNum = before.length;
-        const colNum = before[before.length - 1].length;
-        const lineHeight = 12 * 1.5;
-        const charWidth = 7.2;
-        const padding = 8;
-        const caretTop = (lineNum - 1) * lineHeight + padding;
-        const caretLeft = colNum * charWidth + padding;
-        const viewTop = scroll.scrollTop;
-        const viewBottom = viewTop + scroll.clientHeight;
-        const viewLeft = scroll.scrollLeft;
-        const viewRight = viewLeft + scroll.clientWidth;
-        if (caretTop < viewTop + padding) {
-            scroll.scrollTop = caretTop - padding;
-        } else if (caretTop + lineHeight > viewBottom - padding) {
-            scroll.scrollTop = caretTop + lineHeight - scroll.clientHeight + padding;
-        }
-        if (caretLeft < viewLeft + padding) {
-            scroll.scrollLeft = caretLeft - padding;
-        } else if (caretLeft > viewRight - padding * 2) {
-            scroll.scrollLeft = caretLeft - scroll.clientWidth + padding * 2;
-        }
+    function scrollToCaretYaml() {
+        ensureCaretVisible(elements.yamlYamlEditor, elements.yamlYamlScroll, null);
     }
 
     function showYamlError(which, message) {
-        const el = which === 'json' ? elements.yamlErrorJson : elements.yamlErrorYaml;
-        el.hidden = false;
-        el.textContent = message;
+        elements.yamlErrorYaml.hidden = false;
+        elements.yamlErrorYaml.textContent = message;
     }
 
-    function hideYamlError(which) {
-        if (which === 'json') {
-            elements.yamlErrorJson.hidden = true;
-            elements.yamlErrorJson.textContent = '';
-            yamlJsonErrorLine = null;
-        } else {
-            elements.yamlErrorYaml.hidden = true;
-            elements.yamlErrorYaml.textContent = '';
-            yamlYamlErrorLine = null;
-        }
+    function hideYamlError() {
+        elements.yamlErrorYaml.hidden = true;
+        elements.yamlErrorYaml.textContent = '';
+        yamlYamlErrorLine = null;
     }
 
     function copyYamlOutput() {
@@ -4171,16 +4613,6 @@
         showToast('YAML downloaded', 'success');
     }
 
-    function clearYaml() {
-        elements.yamlJsonEditor.value = '';
-        elements.yamlYamlEditor.value = '';
-        hideYamlError('json');
-        hideYamlError('yaml');
-        refreshYamlEditor('json');
-        refreshYamlEditor('yaml');
-        showToast('Cleared', 'success');
-    }
-
     function uploadYamlFile(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -4189,7 +4621,7 @@
             elements.yamlYamlEditor.value = e.target.result;
             hideYamlError('yaml');
             refreshYamlEditor('yaml');
-            convertYaml('to-json', true);
+            applyYamlToDocument();
             showToast('YAML loaded from ' + file.name, 'success');
         };
         reader.onerror = () => showToast('Failed to read file', 'error');
@@ -4416,7 +4848,6 @@
 
     // ============ Initialize ============
     function init() {
-        initTabs();
         initEditor();
         initTreeViewer();
         initSchema();
@@ -4428,6 +4859,10 @@
         initBookmark();
         initAbout();
         initTheme();
+        initSplitters();
+        initDrawers();
+        initWrap();
+        initShortcuts();
 
         // Try to load from localStorage first
         const savedContent = loadFromStorage();
@@ -4451,8 +4886,14 @@
             };
             elements.editor.value = JSON.stringify(sampleJson, null, 2);
         }
-        
-        handleEditorInput();
+
+        updateLineNumbers();
+        updateSyntaxHighlight();
+        updateCursorStatus();
+        validateJson();
+
+        // Mode comes from the URL hash, so a deep link lands in the right place
+        initModes();
     }
 
     // Run on DOM ready
