@@ -27,8 +27,10 @@
     /* Ink */
     --on-primary: #FFFFFF;
     --on-surface: #1B1F24;
-    --on-surface-variant: #626C78;
-    --on-surface-faint: #8A939E;
+    /* Both muted inks clear WCAG AA (4.5:1) against every surface they land on,
+       while keeping a visible step between them. */
+    --on-surface-variant: #565F6B;
+    --on-surface-faint: #6A737F;
 
     /* Lines */
     --outline: #DCE1E7;
@@ -75,10 +77,10 @@
     --syntax-string: #1F7A48;
     --syntax-number: #1B5FB8;
     --syntax-boolean: #7A3E9D;
-    --syntax-null: #7C8794;
+    --syntax-null: #6A737F;
     --syntax-key: #A02F55;
     --syntax-bracket: #59636E;
-    --syntax-comment: #8A939E;
+    --syntax-comment: #6A737F;
     --syntax-anchor: #0F6E68;
 }
 
@@ -101,8 +103,8 @@
 
     --on-primary: #08111C;
     --on-surface: #DCE3EB;
-    --on-surface-variant: #8B95A3;
-    --on-surface-faint: #6B7683;
+    --on-surface-variant: #99A3B1;
+    --on-surface-faint: #808A97;
 
     --outline: #2A313B;
     --outline-variant: #222831;
@@ -130,7 +132,7 @@
     --syntax-null: #7C8794;
     --syntax-key: #EDA0B4;
     --syntax-bracket: #96A2B0;
-    --syntax-comment: #6E7A88;
+    --syntax-comment: #808A97;
     --syntax-anchor: #5FC7BC;
 }
 
@@ -488,7 +490,6 @@ body.resizing * { cursor: inherit !important; }
 .pane-icon {
     font-size: 0.9375rem;
     color: var(--on-surface-variant);
-    opacity: 0.7;
 }
 
 .pane-title {
@@ -765,6 +766,10 @@ body.resizing * { cursor: inherit !important; }
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--syntax-boolean) 30%, transparent);
 }
 
+/* Accent-on-accent-tint at 9px falls just under AA in dark; the lighter blue
+   clears it without touching --primary everywhere else. */
+[data-theme="dark"] .tag-a { color: var(--primary-light); }
+
 /* ---- Status badge (status bar) ---- */
 .status-badge {
     display: inline-flex;
@@ -953,7 +958,7 @@ body.resizing * { cursor: inherit !important; }
 .empty-state .material-icons {
     font-size: 1.625rem;
     margin-bottom: 0.625rem;
-    opacity: 0.32;
+    opacity: 0.5;
 }
 
 .empty-state p {
