@@ -1177,6 +1177,8 @@ body.resizing * { cursor: inherit !important; }
 
 .validation-error-item:last-child { margin-bottom: 0; }
 
+.validation-error-item.warning { border-left-color: var(--warning); }
+
 .validation-error-path {
     font-family: var(--font-mono);
     color: var(--primary);

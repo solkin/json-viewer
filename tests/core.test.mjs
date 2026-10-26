@@ -93,13 +93,74 @@ const schemaCases = [
 ];
 for (const [value, schema, valid] of schemaCases)
   test("schema " + JSON.stringify(schema), () =>
-    assert.equal(validateSchema(value, schema).length === 0, valid),
+    assert.equal(validateSchema(value, schema).errors.length === 0, valid),
   );
-test("unknown schema keywords and unresolved refs fail explicitly", () => {
-  assert.throws(() => validateSchema(1, { notAKeyword: 3 }));
+test("unknown schema keywords are reported, unresolved refs fail explicitly", () => {
+  const result = validateSchema("x", {
+    type: "integer",
+    example: 1,
+    "x-vendor": true,
+  });
+  assert.equal(result.errors.length, 1);
+  assert.deepEqual(result.warnings, [
+    "Ignored unknown keywords: example, x-vendor",
+  ]);
+  assert.deepEqual(validateSchema(1, { type: "integer" }).warnings, []);
   assert.throws(() =>
     validateSchema(1, { $ref: "https://example.com/missing" }),
   );
+});
+for (const $schema of [
+  "http://json-schema.org/draft-07/schema",
+  "http://json-schema.org/draft-07/schema#",
+  "https://json-schema.org/draft-07/schema",
+  "https://json-schema.org/draft-07/schema#",
+  "https://json-schema.org/draft/2020-12/schema",
+  "https://json-schema.org/draft/2020-12/schema#",
+])
+  test("schema dialect " + $schema, () =>
+    assert.equal(
+      validateSchema(1, { $schema, type: "string" }).errors.length,
+      1,
+    ),
+  );
+test("unsupported or prototype-named dialects are refused", () => {
+  for (const $schema of [
+    "constructor",
+    "http://json-schema.org/draft-04/schema#",
+  ])
+    assert.throws(() => validateSchema(1, { $schema }), /Supported/);
+});
+test("large integers validate unless the schema compares numeric values", () => {
+  const doc = parseJson('{"id":12345678901234567890,"name":"x"}');
+  assert.deepEqual(
+    validateSchema(doc, {
+      type: "object",
+      properties: { id: { type: "integer" }, name: { enum: ["x", "y"] } },
+    }).errors,
+    [],
+  );
+  assert.equal(
+    validateSchema(parseJson("12345678901234567890"), { type: "string" }).errors
+      .length,
+    1,
+  );
+  for (const schema of [
+    { properties: { id: { maximum: 1e30 } } },
+    { properties: { id: { enum: [1, 2] } } },
+    { uniqueItems: true },
+  ])
+    assert.throws(
+      () => validateSchema(parseJson('{"id":12345678901234567890}'), schema),
+      /compares numeric values/,
+    );
+  assert.throws(
+    () => validateSchema(parseJson("1.00000000000000000001"), {}),
+    /exactly/,
+  );
+  assert.deepEqual(generateSchema(parseJson("12345678901234567890")), {
+    type: "integer",
+  });
 });
 for (const value of [
   [{ a: 1 }, { a: "x" }],
@@ -108,7 +169,7 @@ for (const value of [
   JSON.parse('{"__proto__":1,"constructor":2}'),
 ])
   test("generated schema accepts its input " + JSON.stringify(value), () =>
-    assert.deepEqual(validateSchema(value, generateSchema(value)), []),
+    assert.deepEqual(validateSchema(value, generateSchema(value)).errors, []),
   );
 for (const value of [
   "hello\nworld",
@@ -213,7 +274,7 @@ for (const [value, multiple, valid] of [
 ]) {
   test("schema decimal multipleOf " + value + "/" + multiple, () =>
     assert.equal(
-      validateSchema(value, { multipleOf: multiple }).length === 0,
+      validateSchema(value, { multipleOf: multiple }).errors.length === 0,
       valid,
     ),
   );

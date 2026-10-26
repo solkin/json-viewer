@@ -7,7 +7,7 @@ import {
 } from "./src/json.js";
 import { DocumentEditor } from "./src/editor.js";
 import { JsonTree } from "./src/tree.js";
-import { task } from "./src/tasks.js";
+import { task, isCancelled } from "./src/tasks.js";
 
 /**
  * JSON Editor & Viewer Application
@@ -723,7 +723,7 @@ import { task } from "./src/tasks.js";
       return;
     }
     try {
-      const result = await task("parse", { text: value });
+      const result = await task("parse", { text: value }, "parse");
       if (revision !== documentRevision || value !== elements.editor.value)
         return;
       currentJson = reviveParsed(result.value, result.numbers);
@@ -732,7 +732,11 @@ import { task } from "./src/tasks.js";
       errorLine = null;
       setStatus("valid");
     } catch (e) {
-      if (revision !== documentRevision || value !== elements.editor.value)
+      if (
+        isCancelled(e) ||
+        revision !== documentRevision ||
+        value !== elements.editor.value
+      )
         return;
       currentJson = undefined;
       jsonError = e.message;
@@ -1203,9 +1207,12 @@ import { task } from "./src/tasks.js";
     // stale "valid" would be read as current.
     validatedSnapshot = elements.editor.value + "\0" + schemaText;
 
-    let errors;
+    let errors, warnings;
     try {
-      errors = await task("schema", { text, schema: schemaText });
+      ({ errors, warnings } = await task("schema", {
+        text,
+        schema: schemaText,
+      }));
     } catch (e) {
       if (
         elements.editor.value === text &&
@@ -1222,12 +1229,25 @@ import { task } from "./src/tasks.js";
     )
       return;
 
+    // Ignored keywords are listed so a typo cannot pass as a silent success.
+    const warningsHtml = warnings.length
+      ? `<div class="validation-errors">${warnings
+          .map(
+            (w) => `
+                    <div class="validation-error-item warning">
+                        <span class="validation-error-message">${escapeHtml(w)}</span>
+                    </div>`,
+          )
+          .join("")}</div>`
+      : "";
+
     if (errors.length === 0) {
-      elements.validationContent.innerHTML = `
+      elements.validationContent.innerHTML =
+        `
                 <div class="validation-result valid">
                     <span class="material-icons">check_circle</span>
                     <span>JSON is valid against schema</span>
-                </div>`;
+                </div>` + warningsHtml;
       showToast("Validation passed");
     } else {
       let html = `
@@ -1251,7 +1271,7 @@ import { task } from "./src/tasks.js";
                 </div>`;
       }
 
-      html += "</div>";
+      html += "</div>" + warningsHtml;
       elements.validationContent.innerHTML = html;
       showToast(`Validation failed: ${errors.length} error(s)`, "error");
     }
@@ -1372,7 +1392,7 @@ import { task } from "./src/tasks.js";
     }
 
     try {
-      const bytes = await task("encode", { format: "bson", text });
+      const bytes = await task("encode", { format: "bson", text }, "encode");
       if (text !== elements.editor.value) return;
       currentBsonData = bytes;
       const hexOutput = formatHexDump(currentBsonData.subarray(0, 4096));
@@ -1384,7 +1404,8 @@ import { task } from "./src/tasks.js";
 
       renderBsonStats(data);
     } catch (e) {
-      if (text === elements.editor.value) showBsonError(e.message);
+      if (!isCancelled(e) && text === elements.editor.value)
+        showBsonError(e.message);
     }
   }
 
@@ -1590,7 +1611,7 @@ import { task } from "./src/tasks.js";
     }
 
     try {
-      const bytes = await task("encode", { format: "msgpack", text });
+      const bytes = await task("encode", { format: "msgpack", text }, "encode");
       if (text !== elements.editor.value) return;
       currentMsgpackData = bytes;
       const hexOutput = formatHexDump(currentMsgpackData.subarray(0, 4096));
@@ -1602,7 +1623,8 @@ import { task } from "./src/tasks.js";
 
       renderMsgpackStats(data);
     } catch (e) {
-      if (text === elements.editor.value) showMsgpackError(e.message);
+      if (!isCancelled(e) && text === elements.editor.value)
+        showMsgpackError(e.message);
     }
   }
 
@@ -1780,7 +1802,7 @@ import { task } from "./src/tasks.js";
     }
 
     try {
-      const bytes = await task("encode", { format: "cbor", text });
+      const bytes = await task("encode", { format: "cbor", text }, "encode");
       if (text !== elements.editor.value) return;
       currentCborData = bytes;
       const hexOutput = formatHexDump(currentCborData.subarray(0, 4096));
@@ -1792,7 +1814,8 @@ import { task } from "./src/tasks.js";
 
       renderCborStats(data);
     } catch (e) {
-      if (text === elements.editor.value) showCborError(e.message);
+      if (!isCancelled(e) && text === elements.editor.value)
+        showCborError(e.message);
     }
   }
 
@@ -2312,13 +2335,14 @@ import { task } from "./src/tasks.js";
 
     let out;
     try {
-      out = await task("yamlEncode", { text });
+      out = await task("yamlEncode", { text }, "yamlEncode");
       if (
         text !== elements.editor.value ||
         yamlBefore !== elements.yamlYamlEditor.value
       )
         return;
     } catch (err) {
+      if (isCancelled(err) || text !== elements.editor.value) return;
       showYamlError("yaml", err.message || "Could not serialize to YAML");
       renderYamlStats(null);
       return;

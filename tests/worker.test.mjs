@@ -30,7 +30,7 @@ test("deployed worker entry executes lazy chunks and returns transportable resul
       /9007199254740993/,
     );
     assert.equal(
-      (await task("schema", { text: "123", schema: "false" })).length,
+      (await task("schema", { text: "123", schema: "false" })).errors.length,
       1,
     );
     assert.equal(

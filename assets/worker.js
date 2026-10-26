@@ -1,1 +1,1 @@
-import{j as r}from"./chunk-4EYFCL4S.js";self.onmessage=async({data:{id:s,task:a,args:t}})=>{try{let e=a==="parse"?r(t.text):await(await import("./tools-VR63WX3C.js")).runTask(a,t);self.postMessage({id:s,result:e})}catch(e){self.postMessage({id:s,error:e.message})}};
+import{j as r}from"./chunk-4EYFCL4S.js";self.onmessage=async({data:{id:s,task:a,args:t}})=>{try{let e=a==="parse"?r(t.text):await(await import("./tools-P6CZ7THB.js")).runTask(a,t);self.postMessage({id:s,result:e})}catch(e){self.postMessage({id:s,error:e.message})}};

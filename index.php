@@ -658,6 +658,6 @@
             document.body.classList.add('fonts-loaded');
         }
     </script>
-    <script type="module" src="assets/app.js"></script>
+    <script type="module" src="assets/app.js?v=3f007a574eff"></script>
 </body>
 </html>
