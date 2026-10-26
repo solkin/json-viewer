@@ -1,1283 +1,972 @@
+import {
+  parseJson,
+  stringifyJson,
+  jsonType,
+  isLosslessNumber,
+  reviveParsed,
+} from "./src/json.js";
+import { DocumentEditor } from "./src/editor.js";
+import { JsonTree } from "./src/tree.js";
+import { task } from "./src/tasks.js";
+
 /**
  * JSON Editor & Viewer Application
  * Lightweight, fast JSON editing and viewing tool
  */
-(function() {
-    'use strict';
+(function () {
+  "use strict";
 
-    // DOM Elements
-    const elements = {
-        // Shell
-        railBtns: document.querySelectorAll('.rail-btn'),
-        cmdbarDoc: document.getElementById('cmdbar-doc'),
-        cmdbarCompare: document.getElementById('cmdbar-compare'),
-        stageDoc: document.getElementById('stage-doc'),
-        stageCompare: document.getElementById('stage-compare'),
-        compareRow: document.getElementById('compare-row'),
-        auxRead: document.getElementById('aux-read'),
-        auxValidate: document.getElementById('aux-validate'),
-        auxConvert: document.getElementById('aux-convert'),
-        segs: document.querySelectorAll('#format-switch .seg'),
-        toolGroups: document.querySelectorAll('#aux-convert .tool-group'),
-        convPanels: document.querySelectorAll('#aux-convert .conv'),
-        convInfos: document.querySelectorAll('#aux-convert .conv-info'),
-        yamlInfoContent: document.getElementById('yaml-info-content'),
-        sourceWrapBtn: document.getElementById('source-wrap-btn'),
-        splitterDoc: document.getElementById('splitter-doc'),
-        splitterCmp: document.getElementById('splitter-cmp'),
-        splitterDiff: document.getElementById('splitter-diff'),
-        // Status bar
-        sbCursor: document.getElementById('sb-cursor'),
-        sbLines: document.getElementById('sb-lines'),
-        sbSize: document.getElementById('sb-size'),
-        sbNodes: document.getElementById('sb-nodes'),
-        sbMode: document.getElementById('sb-mode'),
-        sbError: document.getElementById('sb-error'),
-        statusbar: document.querySelector('.statusbar'),
-        // Document
-        editor: document.getElementById('json-editor'),
-        editorScroll: document.getElementById('editor-scroll'),
-        syntaxHighlight: document.getElementById('syntax-highlight'),
-        lineNumbers: document.getElementById('line-numbers'),
-        statusBadge: document.getElementById('status-badge'),
-        formatBtn: document.getElementById('format-btn'),
-        minifyBtn: document.getElementById('minify-btn'),
-        copyBtn: document.getElementById('copy-btn'),
-        clearBtn: document.getElementById('clear-btn'),
-        treeContent: document.getElementById('tree-content'),
-        detailsContent: document.getElementById('details-content'),
-        expandAllBtn: document.getElementById('expand-all'),
-        collapseAllBtn: document.getElementById('collapse-all'),
-        schemaEditor: document.getElementById('schema-editor'),
-        schemaEditorScroll: document.getElementById('schema-editor-scroll'),
-        schemaSyntaxHighlight: document.getElementById('schema-syntax-highlight'),
-        schemaLineNumbers: document.getElementById('schema-line-numbers'),
-        schemaInfoContent: document.getElementById('schema-info-content'),
-        validationContent: document.getElementById('validation-content'),
-        generateSchemaBtn: document.getElementById('generate-schema-btn'),
-        uploadSchemaInput: document.getElementById('upload-schema'),
-        validateBtn: document.getElementById('validate-btn'),
-        copySchemaBtn: document.getElementById('copy-schema-btn'),
-        downloadSchemaBtn: document.getElementById('download-schema-btn'),
-        downloadJsonBtn: document.getElementById('download-json-btn'),
-        uploadJsonInput: document.getElementById('upload-json'),
-        bsonContent: document.getElementById('bson-content'),
-        bsonInfoContent: document.getElementById('bson-info-content'),
-        copyBsonBtn: document.getElementById('copy-bson'),
-        downloadBsonBtn: document.getElementById('download-bson'),
-        uploadBsonInput: document.getElementById('upload-bson'),
-        msgpackContent: document.getElementById('msgpack-content'),
-        msgpackInfoContent: document.getElementById('msgpack-info-content'),
-        copyMsgpackBtn: document.getElementById('copy-msgpack'),
-        downloadMsgpackBtn: document.getElementById('download-msgpack'),
-        uploadMsgpackInput: document.getElementById('upload-msgpack'),
-        cborContent: document.getElementById('cbor-content'),
-        cborInfoContent: document.getElementById('cbor-info-content'),
-        copyCborBtn: document.getElementById('copy-cbor'),
-        downloadCborBtn: document.getElementById('download-cbor'),
-        uploadCborInput: document.getElementById('upload-cbor'),
-        compareRunBtn: document.getElementById('compare-run-btn'),
-        compareSwapBtn: document.getElementById('compare-swap-btn'),
-        compareFromEditorA: document.getElementById('compare-from-editor-a-btn'),
-        compareFromEditorB: document.getElementById('compare-from-editor-b-btn'),
-        compareCopyReportBtn: document.getElementById('compare-copy-report-btn'),
-        compareJsonA: document.getElementById('compare-json-a'),
-        compareJsonB: document.getElementById('compare-json-b'),
-        compareLineNumbersA: document.getElementById('compare-a-line-numbers'),
-        compareLineNumbersB: document.getElementById('compare-b-line-numbers'),
-        compareScrollA: document.getElementById('compare-a-scroll'),
-        compareScrollB: document.getElementById('compare-b-scroll'),
-        compareSyntaxA: document.getElementById('compare-a-syntax'),
-        compareSyntaxB: document.getElementById('compare-b-syntax'),
-        compareErrorA: document.getElementById('compare-error-a'),
-        compareErrorB: document.getElementById('compare-error-b'),
-        compareResultsContent: document.getElementById('compare-results-content'),
-        uploadCompareA: document.getElementById('upload-compare-a'),
-        uploadCompareB: document.getElementById('upload-compare-b'),
-        yamlCopyBtn: document.getElementById('yaml-copy-btn'),
-        yamlDownloadBtn: document.getElementById('yaml-download-btn'),
-        uploadYaml: document.getElementById('upload-yaml'),
-        yamlYamlEditor: document.getElementById('yaml-yaml-editor'),
-        yamlYamlLineNumbers: document.getElementById('yaml-yaml-line-numbers'),
-        yamlYamlScroll: document.getElementById('yaml-yaml-scroll'),
-        yamlYamlSyntax: document.getElementById('yaml-yaml-syntax'),
-        yamlErrorYaml: document.getElementById('yaml-error-yaml'),
-        toast: document.getElementById('toast'),
-        bookmarkBtn: document.getElementById('bookmark-btn'),
-        aboutBtn: document.getElementById('about-btn'),
-        aboutModal: document.getElementById('about-modal'),
-        aboutClose: document.getElementById('about-close'),
-        themeToggle: document.getElementById('theme-toggle'),
-        themeIcon: document.getElementById('theme-icon')
+  // DOM Elements
+  const elements = {
+    // Shell
+    railBtns: document.querySelectorAll(".rail-btn"),
+    cmdbarDoc: document.getElementById("cmdbar-doc"),
+    cmdbarCompare: document.getElementById("cmdbar-compare"),
+    stageDoc: document.getElementById("stage-doc"),
+    stageCompare: document.getElementById("stage-compare"),
+    compareRow: document.getElementById("compare-row"),
+    auxRead: document.getElementById("aux-read"),
+    auxValidate: document.getElementById("aux-validate"),
+    auxConvert: document.getElementById("aux-convert"),
+    segs: document.querySelectorAll("#format-switch .seg"),
+    toolGroups: document.querySelectorAll("#aux-convert .tool-group"),
+    convPanels: document.querySelectorAll("#aux-convert .conv"),
+    convInfos: document.querySelectorAll("#aux-convert .conv-info"),
+    yamlInfoContent: document.getElementById("yaml-info-content"),
+    sourceWrapBtn: document.getElementById("source-wrap-btn"),
+    splitterDoc: document.getElementById("splitter-doc"),
+    splitterCmp: document.getElementById("splitter-cmp"),
+    splitterDiff: document.getElementById("splitter-diff"),
+    // Status bar
+    sbCursor: document.getElementById("sb-cursor"),
+    sbLines: document.getElementById("sb-lines"),
+    sbSize: document.getElementById("sb-size"),
+    sbNodes: document.getElementById("sb-nodes"),
+    sbMode: document.getElementById("sb-mode"),
+    sbError: document.getElementById("sb-error"),
+    statusbar: document.querySelector(".statusbar"),
+    // Document
+    editor: document.getElementById("json-editor"),
+    editorScroll: document.getElementById("editor-scroll"),
+    statusBadge: document.getElementById("status-badge"),
+    formatBtn: document.getElementById("format-btn"),
+    minifyBtn: document.getElementById("minify-btn"),
+    copyBtn: document.getElementById("copy-btn"),
+    clearBtn: document.getElementById("clear-btn"),
+    treeContent: document.getElementById("tree-content"),
+    detailsContent: document.getElementById("details-content"),
+    expandAllBtn: document.getElementById("expand-all"),
+    collapseAllBtn: document.getElementById("collapse-all"),
+    schemaEditor: document.getElementById("schema-editor"),
+    schemaInfoContent: document.getElementById("schema-info-content"),
+    validationContent: document.getElementById("validation-content"),
+    generateSchemaBtn: document.getElementById("generate-schema-btn"),
+    uploadSchemaInput: document.getElementById("upload-schema"),
+    validateBtn: document.getElementById("validate-btn"),
+    copySchemaBtn: document.getElementById("copy-schema-btn"),
+    downloadSchemaBtn: document.getElementById("download-schema-btn"),
+    downloadJsonBtn: document.getElementById("download-json-btn"),
+    uploadJsonInput: document.getElementById("upload-json"),
+    bsonContent: document.getElementById("bson-content"),
+    bsonInfoContent: document.getElementById("bson-info-content"),
+    copyBsonBtn: document.getElementById("copy-bson"),
+    downloadBsonBtn: document.getElementById("download-bson"),
+    uploadBsonInput: document.getElementById("upload-bson"),
+    msgpackContent: document.getElementById("msgpack-content"),
+    msgpackInfoContent: document.getElementById("msgpack-info-content"),
+    copyMsgpackBtn: document.getElementById("copy-msgpack"),
+    downloadMsgpackBtn: document.getElementById("download-msgpack"),
+    uploadMsgpackInput: document.getElementById("upload-msgpack"),
+    cborContent: document.getElementById("cbor-content"),
+    cborInfoContent: document.getElementById("cbor-info-content"),
+    copyCborBtn: document.getElementById("copy-cbor"),
+    downloadCborBtn: document.getElementById("download-cbor"),
+    uploadCborInput: document.getElementById("upload-cbor"),
+    compareRunBtn: document.getElementById("compare-run-btn"),
+    compareSwapBtn: document.getElementById("compare-swap-btn"),
+    compareFromEditorA: document.getElementById("compare-from-editor-a-btn"),
+    compareFromEditorB: document.getElementById("compare-from-editor-b-btn"),
+    compareCopyReportBtn: document.getElementById("compare-copy-report-btn"),
+    compareJsonA: document.getElementById("compare-json-a"),
+    compareJsonB: document.getElementById("compare-json-b"),
+    compareScrollA: document.getElementById("compare-a-scroll"),
+    compareScrollB: document.getElementById("compare-b-scroll"),
+    compareErrorA: document.getElementById("compare-error-a"),
+    compareErrorB: document.getElementById("compare-error-b"),
+    compareResultsContent: document.getElementById("compare-results-content"),
+    uploadCompareA: document.getElementById("upload-compare-a"),
+    uploadCompareB: document.getElementById("upload-compare-b"),
+    yamlCopyBtn: document.getElementById("yaml-copy-btn"),
+    yamlDownloadBtn: document.getElementById("yaml-download-btn"),
+    uploadYaml: document.getElementById("upload-yaml"),
+    yamlYamlEditor: document.getElementById("yaml-yaml-editor"),
+    yamlYamlScroll: document.getElementById("yaml-yaml-scroll"),
+    yamlErrorYaml: document.getElementById("yaml-error-yaml"),
+    toast: document.getElementById("toast"),
+    bookmarkBtn: document.getElementById("bookmark-btn"),
+    aboutBtn: document.getElementById("about-btn"),
+    aboutModal: document.getElementById("about-modal"),
+    aboutClose: document.getElementById("about-close"),
+    themeToggle: document.getElementById("theme-toggle"),
+    themeIcon: document.getElementById("theme-icon"),
+  };
+
+  // State
+  let currentJson = undefined;
+  let documentRevision = 0;
+  let parsedText = null;
+  let parsedNodeCount = 0;
+  let equivalentParse;
+  let treeView;
+  let jsonError = null;
+  let errorLine = null;
+  let selectedNode = null;
+  let debounceTimer = null;
+  let saveTimer = null;
+
+  // LocalStorage keys
+  const STORAGE_KEY = "json-viewer-content";
+  const THEME_KEY = "json-viewer-theme";
+  const COMPARE_MAX_DIFFS = 500;
+
+  let lastCompareReportText = "";
+  let compareErrorLineA = null;
+  let compareErrorLineB = null;
+
+  let yamlDebounce = null;
+  let yamlYamlErrorLine = null;
+  let yamlSyncing = false;
+
+  // ============ Workspace modes & routing ============
+  // The document (main editor) is the single source of truth. Modes are views
+  // over it; only Compare works on its own pair of documents.
+  const MODES = ["read", "validate", "convert", "compare"];
+  const FORMATS = ["yaml", "bson", "msgpack", "cbor"];
+  const MODE_LABELS = {
+    read: "Read",
+    validate: "Validate",
+    convert: "Convert",
+    compare: "Compare",
+  };
+
+  let currentMode = "read";
+  let currentFormat = "yaml";
+  let lastTreeSignature = null;
+  let validatedSnapshot = null;
+
+  function initModes() {
+    elements.railBtns.forEach((btn) => {
+      btn.addEventListener("click", () => navigate(btn.dataset.mode));
+    });
+    elements.segs.forEach((seg) => {
+      seg.addEventListener("click", () =>
+        navigate("convert", seg.dataset.format),
+      );
+    });
+    window.addEventListener("hashchange", applyHash);
+    applyHash();
+  }
+
+  function parseHash() {
+    const parts = (window.location.hash || "")
+      .replace(/^#\/?/, "")
+      .split("/")
+      .filter(Boolean);
+    const mode = MODES.indexOf(parts[0]) >= 0 ? parts[0] : "read";
+    let format = currentFormat;
+    if (mode === "convert" && FORMATS.indexOf(parts[1]) >= 0) {
+      format = parts[1];
+    }
+    return { mode: mode, format: format };
+  }
+
+  function applyHash() {
+    const target = parseHash();
+    setMode(target.mode, target.format);
+
+    // Keep the URL honest when it named a route that does not exist, so it
+    // never disagrees with the mode actually on screen.
+    const canonical =
+      target.mode === "convert"
+        ? "#/convert/" + target.format
+        : "#/" + target.mode;
+    if (window.location.hash && window.location.hash !== canonical) {
+      window.history.replaceState(null, "", canonical);
+    }
+  }
+
+  function navigate(mode, format) {
+    const hash =
+      mode === "convert"
+        ? "#/convert/" + (format || currentFormat)
+        : "#/" + mode;
+    if (window.location.hash === hash) {
+      setMode(mode, format);
+    } else {
+      // hashchange drives setMode, so back/forward stay in sync
+      window.location.hash = hash;
+    }
+  }
+
+  function setMode(mode, format) {
+    currentMode = mode;
+    if (format) currentFormat = format;
+
+    elements.railBtns.forEach((b) => {
+      const on = b.dataset.mode === mode;
+      b.classList.toggle("active", on);
+      if (on) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
+
+    const isCompare = mode === "compare";
+    elements.stageDoc.hidden = isCompare;
+    elements.stageCompare.hidden = !isCompare;
+    elements.cmdbarDoc.hidden = isCompare;
+    elements.cmdbarCompare.hidden = !isCompare;
+
+    elements.auxRead.hidden = mode !== "read";
+    elements.auxValidate.hidden = mode !== "validate";
+    elements.auxConvert.hidden = mode !== "convert";
+
+    if (mode === "convert") applyFormat(currentFormat);
+
+    elements.sbMode.textContent = MODE_LABELS[mode];
+    // Compare works on its own two documents, so the working document's
+    // metrics would describe something that is not on screen.
+    elements.statusbar.classList.toggle("doc-hidden", isCompare);
+
+    if (isCompare) {
+      refreshCompareEditor("a");
+      refreshCompareEditor("b");
+    } else {
+      refreshActiveView();
+    }
+  }
+
+  function applyFormat(format) {
+    currentFormat = format;
+    elements.segs.forEach((s) => {
+      const on = s.dataset.format === format;
+      s.classList.toggle("active", on);
+      s.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    elements.toolGroups.forEach((g) => {
+      g.hidden = g.dataset.format !== format;
+    });
+    elements.convPanels.forEach((p) => {
+      p.hidden = p.dataset.format !== format;
+    });
+    elements.convInfos.forEach((p) => {
+      p.hidden = p.dataset.format !== format;
+    });
+  }
+
+  // Re-render whatever the active mode shows. Called after every validation
+  // pass, which is what makes the aux pane live rather than tab-gated.
+  function refreshActiveView() {
+    if (currentMode === "read") {
+      refreshTreeView();
+    } else if (currentMode === "validate") {
+      refreshValidateView();
+    } else if (currentMode === "convert") {
+      refreshConvertView();
+    }
+  }
+
+  function refreshTreeView() {
+    if (jsonError) {
+      lastTreeSignature = null;
+      showViewerError(jsonError);
+      return;
+    }
+    if (currentJson === undefined) {
+      lastTreeSignature = null;
+      showViewerEmpty();
+      return;
+    }
+    if (lastTreeSignature === currentJson) return;
+    lastTreeSignature = currentJson;
+    renderTree(currentJson);
+  }
+
+  function refreshValidateView() {
+    retireStaleVerdict();
+
+    if (currentJson === undefined && !elements.schemaEditor.value.trim()) {
+      if (jsonError) {
+        showSchemaError(jsonError);
+      } else {
+        showSchemaEmpty();
+      }
+      return;
+    }
+    // Seed a schema the first time there is a document but no schema yet.
+    if (!elements.schemaEditor.value.trim() && currentJson !== undefined) {
+      renderSchema(currentJson);
+    }
+  }
+
+  // A verdict only describes the document and schema it was run against.
+  function retireStaleVerdict() {
+    if (validatedSnapshot === null) return;
+    const now =
+      elements.editor.value + "\0" + elements.schemaEditor.value.trim();
+    if (now === validatedSnapshot) return;
+    validatedSnapshot = null;
+    clearValidationResult();
+  }
+
+  function refreshConvertView() {
+    if (currentFormat === "yaml") {
+      syncYamlFromDocument();
+      return;
+    }
+    const renderers = {
+      bson: [renderBson, showBsonError, showBsonEmpty],
+      msgpack: [renderMsgpack, showMsgpackError, showMsgpackEmpty],
+      cbor: [renderCbor, showCborError, showCborEmpty],
     };
-
-    // State
-    let currentJson = null;
-    let jsonError = null;
-    let errorLine = null;
-    let selectedNode = null;
-    let debounceTimer = null;
-    let saveTimer = null;
-    
-    // LocalStorage keys
-    const STORAGE_KEY = 'json-viewer-content';
-    const THEME_KEY = 'json-viewer-theme';
-    // Above this the per-line gutter measurement costs more than it is worth
-    const WRAP_ALIGN_MAX_CHARS = 200000;
-    const COMPARE_MAX_DIFFS = 500;
-
-    let lastCompareReportText = '';
-    let compareErrorLineA = null;
-    let compareErrorLineB = null;
-
-    let yamlDebounce = null;
-    let yamlYamlErrorLine = null;
-    let yamlSyncing = false;
-
-    // ============ Workspace modes & routing ============
-    // The document (main editor) is the single source of truth. Modes are views
-    // over it; only Compare works on its own pair of documents.
-    const MODES = ['read', 'validate', 'convert', 'compare'];
-    const FORMATS = ['yaml', 'bson', 'msgpack', 'cbor'];
-    const MODE_LABELS = { read: 'Read', validate: 'Validate', convert: 'Convert', compare: 'Compare' };
-
-    let currentMode = 'read';
-    let currentFormat = 'yaml';
-    let lastTreeSignature = null;
-    let validatedSnapshot = null;
-
-    function initModes() {
-        elements.railBtns.forEach(btn => {
-            btn.addEventListener('click', () => navigate(btn.dataset.mode));
-        });
-        elements.segs.forEach(seg => {
-            seg.addEventListener('click', () => navigate('convert', seg.dataset.format));
-        });
-        window.addEventListener('hashchange', applyHash);
-        applyHash();
+    const set = renderers[currentFormat];
+    if (!set) return;
+    if (jsonError) {
+      set[1](jsonError);
+    } else if (currentJson !== undefined) {
+      set[0](currentJson);
+    } else {
+      set[2]();
     }
+  }
 
-    function parseHash() {
-        const parts = (window.location.hash || '').replace(/^#\/?/, '').split('/').filter(Boolean);
-        const mode = MODES.indexOf(parts[0]) >= 0 ? parts[0] : 'read';
-        let format = currentFormat;
-        if (mode === 'convert' && FORMATS.indexOf(parts[1]) >= 0) {
-            format = parts[1];
-        }
-        return { mode: mode, format: format };
-    }
-
-    function applyHash() {
-        const target = parseHash();
-        setMode(target.mode, target.format);
-
-        // Keep the URL honest when it named a route that does not exist, so it
-        // never disagrees with the mode actually on screen.
-        const canonical = target.mode === 'convert'
-            ? '#/convert/' + target.format
-            : '#/' + target.mode;
-        if (window.location.hash && window.location.hash !== canonical) {
-            window.history.replaceState(null, '', canonical);
-        }
-    }
-
-    function navigate(mode, format) {
-        const hash = mode === 'convert' ? '#/convert/' + (format || currentFormat) : '#/' + mode;
-        if (window.location.hash === hash) {
-            setMode(mode, format);
-        } else {
-            // hashchange drives setMode, so back/forward stay in sync
-            window.location.hash = hash;
-        }
-    }
-
-    function setMode(mode, format) {
-        currentMode = mode;
-        if (format) currentFormat = format;
-
-        elements.railBtns.forEach(b => {
-            const on = b.dataset.mode === mode;
-            b.classList.toggle('active', on);
-            if (on) b.setAttribute('aria-current', 'page');
-            else b.removeAttribute('aria-current');
-        });
-
-        const isCompare = mode === 'compare';
-        elements.stageDoc.hidden = isCompare;
-        elements.stageCompare.hidden = !isCompare;
-        elements.cmdbarDoc.hidden = isCompare;
-        elements.cmdbarCompare.hidden = !isCompare;
-
-        elements.auxRead.hidden = mode !== 'read';
-        elements.auxValidate.hidden = mode !== 'validate';
-        elements.auxConvert.hidden = mode !== 'convert';
-
-        if (mode === 'convert') applyFormat(currentFormat);
-
-        elements.sbMode.textContent = MODE_LABELS[mode];
-        // Compare works on its own two documents, so the working document's
-        // metrics would describe something that is not on screen.
-        elements.statusbar.classList.toggle('doc-hidden', isCompare);
-
-        if (isCompare) {
-            refreshCompareEditor('a');
-            refreshCompareEditor('b');
-        } else {
-            refreshActiveView();
-        }
-    }
-
-    function applyFormat(format) {
-        currentFormat = format;
-        elements.segs.forEach(s => {
-            const on = s.dataset.format === format;
-            s.classList.toggle('active', on);
-            s.setAttribute('aria-selected', on ? 'true' : 'false');
-        });
-        elements.toolGroups.forEach(g => { g.hidden = g.dataset.format !== format; });
-        elements.convPanels.forEach(p => { p.hidden = p.dataset.format !== format; });
-        elements.convInfos.forEach(p => { p.hidden = p.dataset.format !== format; });
-    }
-
-    // Re-render whatever the active mode shows. Called after every validation
-    // pass, which is what makes the aux pane live rather than tab-gated.
-    function refreshActiveView() {
-        if (currentMode === 'read') {
-            refreshTreeView();
-        } else if (currentMode === 'validate') {
-            refreshValidateView();
-        } else if (currentMode === 'convert') {
-            refreshConvertView();
-        }
-    }
-
-    function refreshTreeView() {
-        if (jsonError) {
-            lastTreeSignature = null;
-            showViewerError(jsonError);
-            return;
-        }
-        if (currentJson === null) {
-            lastTreeSignature = null;
-            showViewerEmpty();
-            return;
-        }
-        // Skip the re-render when only whitespace changed, so an expanded tree
-        // does not collapse while the user is formatting.
-        let signature;
-        try {
-            signature = JSON.stringify(currentJson);
-        } catch (e) {
-            signature = null;
-        }
-        if (signature !== null && signature === lastTreeSignature) return;
-        lastTreeSignature = signature;
-        renderTree(currentJson);
-    }
-
-    function refreshValidateView() {
-        retireStaleVerdict();
-
-        if (currentJson === null && !elements.schemaEditor.value.trim()) {
-            if (jsonError) {
-                showSchemaError(jsonError);
-            } else {
-                showSchemaEmpty();
-            }
-            return;
-        }
-        // Seed a schema the first time there is a document but no schema yet.
-        if (!elements.schemaEditor.value.trim() && currentJson !== null) {
-            renderSchema(currentJson);
-        }
-    }
-
-    // A verdict only describes the document and schema it was run against.
-    function retireStaleVerdict() {
-        if (validatedSnapshot === null) return;
-        const now = elements.editor.value + ' ' + elements.schemaEditor.value.trim();
-        if (now === validatedSnapshot) return;
-        validatedSnapshot = null;
-        clearValidationResult();
-    }
-
-    function refreshConvertView() {
-        if (currentFormat === 'yaml') {
-            syncYamlFromDocument();
-            return;
-        }
-        const renderers = {
-            bson: [renderBson, showBsonError, showBsonEmpty],
-            msgpack: [renderMsgpack, showMsgpackError, showMsgpackEmpty],
-            cbor: [renderCbor, showCborError, showCborEmpty]
-        };
-        const set = renderers[currentFormat];
-        if (!set) return;
-        if (jsonError) {
-            set[1](jsonError);
-        } else if (currentJson !== null) {
-            set[0](currentJson);
-        } else {
-            set[2]();
-        }
-    }
-
-
-    function showViewerError(error) {
-        elements.treeContent.innerHTML = `
+  function showViewerError(error) {
+    treeView.clear();
+    elements.treeContent.innerHTML = `
             <div class="empty-state error-state">
                 <span class="material-icons">error_outline</span>
                 <p>Invalid JSON</p>
                 <p class="error-message">${escapeHtml(error)}</p>
             </div>`;
-        resetDetails();
-    }
-    
-    function showViewerEmpty() {
-        elements.treeContent.innerHTML = `
+    resetDetails();
+  }
+
+  function showViewerEmpty() {
+    treeView.clear();
+    elements.treeContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">info_outline</span>
                 <p>Enter valid JSON in the editor to view structure</p>
             </div>`;
-        resetDetails();
-    }
-    
-    function showSchemaError(error) {
-        elements.schemaEditor.placeholder = `Invalid JSON: ${error}\n\nFix JSON errors to generate schema, or paste your own schema here.`;
-        elements.schemaInfoContent.innerHTML = `
+    resetDetails();
+  }
+
+  function showSchemaError(error) {
+    elements.schemaEditor.placeholder = `Invalid JSON: ${error}\n\nFix JSON errors to generate schema, or paste your own schema here.`;
+    elements.schemaInfoContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">block</span>
                 <p>Fix JSON errors to generate schema</p>
             </div>`;
-        elements.validationContent.innerHTML = `
+    elements.validationContent.innerHTML = `
             <div class="validation-result invalid">
                 <span class="material-icons">error</span>
                 <span>Invalid JSON in editor</span>
             </div>`;
-        currentSchema = null;
-    }
-    
-    function showSchemaEmpty() {
-        elements.schemaEditor.placeholder = 'Generate schema from JSON or paste your own...';
-        elements.schemaInfoContent.innerHTML = `
+  }
+
+  function showSchemaEmpty() {
+    elements.schemaEditor.placeholder =
+      "Generate schema from JSON or paste your own...";
+    elements.schemaInfoContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">info_outline</span>
                 <p>Schema statistics will appear here</p>
             </div>`;
-        elements.validationContent.innerHTML = `
+    elements.validationContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">pending</span>
                 <p>Click Validate to check JSON against schema</p>
             </div>`;
-        currentSchema = null;
+  }
+
+  // ============ JSON Editor ============
+  function initEditor() {
+    elements.editor.addEventListener("input", handleEditorInput);
+    elements.editor.addEventListener("cursor", updateCursorStatus);
+
+    // Click anywhere in scroll area focuses editor
+    elements.editorScroll.addEventListener("click", () =>
+      elements.editor.focus(),
+    );
+
+    elements.formatBtn.addEventListener("click", formatJson);
+    elements.minifyBtn.addEventListener("click", minifyJson);
+    elements.copyBtn.addEventListener("click", copyToClipboard);
+    elements.clearBtn.addEventListener("click", clearEditor);
+    elements.downloadJsonBtn.addEventListener("click", downloadJson);
+    elements.uploadJsonInput.addEventListener("change", uploadJson);
+  }
+
+  // ============ Panes: splitters, drawers, wrap ============
+  function initSplitters() {
+    bindSplitter(
+      elements.splitterDoc,
+      elements.stageDoc,
+      "x",
+      "--source-w",
+      "jv-split-doc",
+    );
+    bindSplitter(
+      elements.splitterCmp,
+      elements.compareRow,
+      "x",
+      "--cmp-w",
+      "jv-split-cmp",
+    );
+    bindSplitter(
+      elements.splitterDiff,
+      elements.stageCompare,
+      "y",
+      "--cmp-h",
+      "jv-split-diff",
+    );
+  }
+
+  function bindSplitter(handle, container, axis, varName, storeKey) {
+    if (!handle || !container) return;
+
+    const MIN = 15;
+    const MAX = 85;
+    let dragging = false;
+
+    try {
+      const saved = localStorage.getItem(storeKey);
+      if (saved) container.style.setProperty(varName, saved);
+    } catch (e) {
+      /* storage unavailable */
     }
 
-    // ============ JSON Editor ============
-    function initEditor() {
-        elements.editor.addEventListener('input', handleEditorInput);
-        elements.editor.addEventListener('keydown', handleKeyDown);
-        elements.editor.addEventListener('click', onCaretMove);
-        elements.editor.addEventListener('keyup', onCaretMove);
-        elements.editor.addEventListener('select', updateCursorStatus);
-        elements.editorScroll.addEventListener('scroll', syncLineNumbers, { passive: true });
-        
-        // Click anywhere in scroll area focuses editor
-        elements.editorScroll.addEventListener('click', () => elements.editor.focus());
-        
-        elements.formatBtn.addEventListener('click', formatJson);
-        elements.minifyBtn.addEventListener('click', minifyJson);
-        elements.copyBtn.addEventListener('click', copyToClipboard);
-        elements.clearBtn.addEventListener('click', clearEditor);
-        elements.downloadJsonBtn.addEventListener('click', downloadJson);
-        elements.uploadJsonInput.addEventListener('change', uploadJson);
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      dragging = true;
+      handle.classList.add("dragging");
+      document.body.classList.add("resizing");
+    });
 
-        // Character width depends on the loaded webfont, not the fallback
-        if (document.fonts && document.fonts.ready) {
-            document.fonts.ready.then(() => { editorMetrics = null; });
-        }
+    handle.addEventListener("dblclick", () => {
+      setPercent(50);
+    });
 
-        // Initial state
-        updateLineNumbers();
-        updateSyntaxHighlight();
+    // The handle is focusable, so it has to be operable from the keyboard too.
+    handle.addEventListener("keydown", (e) => {
+      const back = axis === "x" ? "ArrowLeft" : "ArrowUp";
+      const forward = axis === "x" ? "ArrowRight" : "ArrowDown";
+      let next = null;
+
+      if (e.key === back) next = currentPercent() - (e.shiftKey ? 10 : 2);
+      else if (e.key === forward)
+        next = currentPercent() + (e.shiftKey ? 10 : 2);
+      else if (e.key === "Home") next = 50;
+      else return;
+
+      e.preventDefault();
+      setPercent(next);
+    });
+
+    function currentPercent() {
+      const raw = parseFloat(container.style.getPropertyValue(varName));
+      return isNaN(raw) ? 50 : raw;
     }
 
-    function onCaretMove() {
-        scrollToCaret();
-        updateCursorStatus();
+    function setPercent(value) {
+      const pct = Math.min(MAX, Math.max(MIN, value));
+      const text = pct.toFixed(2) + "%";
+      container.style.setProperty(varName, text);
+      handle.setAttribute("aria-valuenow", Math.round(pct));
+      persist(text);
     }
 
-    // ============ Panes: splitters, drawers, wrap ============
-    function initSplitters() {
-        bindSplitter(elements.splitterDoc, elements.stageDoc, 'x', '--source-w', 'jv-split-doc');
-        bindSplitter(elements.splitterCmp, elements.compareRow, 'x', '--cmp-w', 'jv-split-cmp');
-        bindSplitter(elements.splitterDiff, elements.stageCompare, 'y', '--cmp-h', 'jv-split-diff');
+    document.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      const rect = container.getBoundingClientRect();
+      const raw =
+        axis === "x"
+          ? ((e.clientX - rect.left) / rect.width) * 100
+          : ((e.clientY - rect.top) / rect.height) * 100;
+      const pct = Math.min(MAX, Math.max(MIN, raw)).toFixed(2) + "%";
+      container.style.setProperty(varName, pct);
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove("dragging");
+      document.body.classList.remove("resizing");
+      persist(container.style.getPropertyValue(varName));
+    });
+
+    function persist(value) {
+      try {
+        localStorage.setItem(storeKey, value);
+      } catch (e) {
+        /* storage unavailable */
+      }
     }
+  }
 
-    function bindSplitter(handle, container, axis, varName, storeKey) {
-        if (!handle || !container) return;
+  function initDrawers() {
+    document.querySelectorAll(".drawer-head").forEach((head) => {
+      const drawer = head.closest(".drawer");
+      if (!drawer) return;
+      const key = "jv-drawer-" + drawer.id;
 
-        const MIN = 15;
-        const MAX = 85;
-        let dragging = false;
+      try {
+        const stored = localStorage.getItem(key);
+        if (stored === "1") drawer.classList.add("collapsed");
+        else if (stored === "0") drawer.classList.remove("collapsed");
+      } catch (e) {
+        /* storage unavailable */
+      }
 
+      syncAria();
+      head.addEventListener("click", () => {
+        drawer.classList.toggle("collapsed");
+        syncAria();
         try {
-            const saved = localStorage.getItem(storeKey);
-            if (saved) container.style.setProperty(varName, saved);
-        } catch (e) { /* storage unavailable */ }
-
-        handle.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            dragging = true;
-            handle.classList.add('dragging');
-            document.body.classList.add('resizing');
-        });
-
-        handle.addEventListener('dblclick', () => {
-            setPercent(50);
-        });
-
-        // The handle is focusable, so it has to be operable from the keyboard too.
-        handle.addEventListener('keydown', (e) => {
-            const back = axis === 'x' ? 'ArrowLeft' : 'ArrowUp';
-            const forward = axis === 'x' ? 'ArrowRight' : 'ArrowDown';
-            let next = null;
-
-            if (e.key === back) next = currentPercent() - (e.shiftKey ? 10 : 2);
-            else if (e.key === forward) next = currentPercent() + (e.shiftKey ? 10 : 2);
-            else if (e.key === 'Home') next = 50;
-            else return;
-
-            e.preventDefault();
-            setPercent(next);
-        });
-
-        function currentPercent() {
-            const raw = parseFloat(container.style.getPropertyValue(varName));
-            return isNaN(raw) ? 50 : raw;
-        }
-
-        function setPercent(value) {
-            const pct = Math.min(MAX, Math.max(MIN, value));
-            const text = pct.toFixed(2) + '%';
-            container.style.setProperty(varName, text);
-            handle.setAttribute('aria-valuenow', Math.round(pct));
-            persist(text);
-        }
-
-        document.addEventListener('mousemove', (e) => {
-            if (!dragging) return;
-            const rect = container.getBoundingClientRect();
-            const raw = axis === 'x'
-                ? ((e.clientX - rect.left) / rect.width) * 100
-                : ((e.clientY - rect.top) / rect.height) * 100;
-            const pct = Math.min(MAX, Math.max(MIN, raw)).toFixed(2) + '%';
-            container.style.setProperty(varName, pct);
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (!dragging) return;
-            dragging = false;
-            handle.classList.remove('dragging');
-            document.body.classList.remove('resizing');
-            persist(container.style.getPropertyValue(varName));
-        });
-
-        function persist(value) {
-            try {
-                localStorage.setItem(storeKey, value);
-            } catch (e) { /* storage unavailable */ }
-        }
-    }
-
-    function initDrawers() {
-        document.querySelectorAll('.drawer-head').forEach(head => {
-            const drawer = head.closest('.drawer');
-            if (!drawer) return;
-            const key = 'jv-drawer-' + drawer.id;
-
-            try {
-                const stored = localStorage.getItem(key);
-                if (stored === '1') drawer.classList.add('collapsed');
-                else if (stored === '0') drawer.classList.remove('collapsed');
-            } catch (e) { /* storage unavailable */ }
-
-            syncAria();
-            head.addEventListener('click', () => {
-                drawer.classList.toggle('collapsed');
-                syncAria();
-                try {
-                    localStorage.setItem(key, drawer.classList.contains('collapsed') ? '1' : '0');
-                } catch (e) { /* storage unavailable */ }
-            });
-
-            function syncAria() {
-                head.setAttribute('aria-expanded', drawer.classList.contains('collapsed') ? 'false' : 'true');
-            }
-        });
-    }
-
-    function initWrap() {
-        const container = elements.editor.closest('.editor-container');
-        if (!container || !elements.sourceWrapBtn) return;
-
-        let wrapped = false;
-        try {
-            wrapped = localStorage.getItem('jv-wrap') === '1';
-        } catch (e) { /* storage unavailable */ }
-
-        apply();
-        elements.sourceWrapBtn.addEventListener('click', () => {
-            wrapped = !wrapped;
-            apply();
-            try {
-                localStorage.setItem('jv-wrap', wrapped ? '1' : '0');
-            } catch (e) { /* storage unavailable */ }
-        });
-
-        // Re-wrapping changes how tall each line is, so the gutter has to be
-        // re-measured whenever the pane width changes.
-        if (window.ResizeObserver) {
-            let pending = false;
-            const observer = new ResizeObserver(() => {
-                if (pending) return;
-                pending = true;
-                requestAnimationFrame(() => {
-                    pending = false;
-                    alignGutterToWrap();
-                });
-            });
-            observer.observe(elements.editorScroll);
-        }
-
-        function apply() {
-            container.classList.toggle('wrap', wrapped);
-            elements.sourceWrapBtn.classList.toggle('active', wrapped);
-            elements.sourceWrapBtn.title = wrapped ? 'Word wrap: on' : 'Word wrap: off';
-            updateLineNumbers();
-            updateSyntaxHighlight();
-        }
-    }
-
-    function initShortcuts() {
-        document.addEventListener('keydown', (e) => {
-            // Mode switching is bound to Alt+digit, not Ctrl/Cmd+digit: browsers
-            // reserve Ctrl+1..8 (and Cmd+1..8 on macOS) for tab switching and do
-            // not let a page cancel it. Ctrl is accepted too for the platforms
-            // where it happens to be free.
-            // Matched on e.code, because Option+3 on macOS reports e.key as '£'
-            // and non-Latin layouts remap e.key as well.
-            const modeIndex = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
-            if (modeIndex >= 0 && (e.altKey || e.ctrlKey) && !e.metaKey && !e.shiftKey) {
-                e.preventDefault();
-                navigate(MODES[modeIndex]);
-                return;
-            }
-
-            if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
-                e.preventDefault();
-                formatJson();
-            }
-        });
-    }
-
-    function handleEditorInput() {
-        // Instant visual updates
-        updateLineNumbers();
-        updateSyntaxHighlight();
-        updateCursorStatus();
-
-        // Ensure caret is visible
-        scrollToCaret();
-
-        // Debounce only JSON validation
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(validateJson, 250);
-
-        // Debounce localStorage save (1 sec)
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(saveToStorage, 1000);
-    }
-
-    // ============ Status bar ============
-    function updateStatusBar() {
-        const value = elements.editor.value;
-        const lineCount = value === '' ? 0 : value.split('\n').length;
-        const byteCount = new TextEncoder().encode(value).length;
-
-        elements.sbLines.textContent = lineCount + (lineCount === 1 ? ' line' : ' lines');
-        elements.sbSize.textContent = formatBytes(byteCount);
-
-        const nodeCount = currentJson === null ? 0 : countNodes(currentJson);
-        elements.sbNodes.textContent = nodeCount + (nodeCount === 1 ? ' node' : ' nodes');
-
-        if (jsonError) {
-            elements.sbError.hidden = false;
-            elements.sbError.textContent = jsonError;
-        } else {
-            elements.sbError.hidden = true;
-            elements.sbError.textContent = '';
-        }
-    }
-
-    function updateCursorStatus() {
-        const pos = elements.editor.selectionStart;
-        const before = elements.editor.value.substring(0, pos).split('\n');
-        elements.sbCursor.textContent = 'Ln ' + before.length + ', Col ' + (before[before.length - 1].length + 1);
-    }
-
-    function countNodes(value) {
-        if (value === null || typeof value !== 'object') return 1;
-        let total = 1;
-        if (Array.isArray(value)) {
-            for (let i = 0; i < value.length; i++) total += countNodes(value[i]);
-        } else {
-            for (const key in value) {
-                if (Object.prototype.hasOwnProperty.call(value, key)) total += countNodes(value[key]);
-            }
-        }
-        return total;
-    }
-    
-    function saveToStorage() {
-        try {
-            localStorage.setItem(STORAGE_KEY, elements.editor.value);
+          localStorage.setItem(
+            key,
+            drawer.classList.contains("collapsed") ? "1" : "0",
+          );
         } catch (e) {
-            // Silently fail if localStorage is not available or full
-            console.warn('Failed to save to localStorage:', e);
+          /* storage unavailable */
         }
-    }
-    
-    function loadFromStorage() {
-        try {
-            return localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-            console.warn('Failed to load from localStorage:', e);
-            return null;
-        }
-    }
-    
-    function clearStorage() {
-        try {
-            localStorage.removeItem(STORAGE_KEY);
-        } catch (e) {
-            // Silently fail
-        }
-    }
-    
-    // Editor geometry is measured, not assumed: the whole UI scales from
-    // --ui-scale, so hard-coded 12px/7.2px constants drift the moment it moves.
-    let editorMetrics = null;
+      });
 
-    function getEditorMetrics(el) {
-        if (editorMetrics) return editorMetrics;
-
-        const cs = getComputedStyle(el);
-        const fontSize = parseFloat(cs.fontSize) || 12;
-        let lineHeight = parseFloat(cs.lineHeight);
-        if (isNaN(lineHeight)) lineHeight = fontSize * 1.5;
-
-        const probe = document.createElement('span');
-        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;top:-9999px';
-        probe.style.font = cs.font;
-        probe.style.fontFamily = cs.fontFamily;
-        probe.style.fontSize = cs.fontSize;
-        probe.textContent = '0'.repeat(100);
-        document.body.appendChild(probe);
-        const charWidth = probe.getBoundingClientRect().width / 100;
-        probe.remove();
-
-        editorMetrics = {
-            lineHeight: lineHeight,
-            charWidth: charWidth || fontSize * 0.6,
-            padTop: parseFloat(cs.paddingTop) || 0,
-            padLeft: parseFloat(cs.paddingLeft) || 0
-        };
-        return editorMetrics;
-    }
-
-    function ensureCaretVisible(editor, scroll, syntaxEl) {
-        const m = getEditorMetrics(editor);
-        const pos = editor.selectionStart;
-        const before = editor.value.substring(0, pos).split('\n');
-        const lineNum = before.length;
-        const colNum = before[before.length - 1].length;
-
-        const wrapped = isWrapped(editor);
-        let caretTop = (lineNum - 1) * m.lineHeight + m.padTop;
-
-        if (wrapped) {
-            // A wrapped line is taller than one row, so read its real offset from
-            // the rendered block. Very large documents render without per-line
-            // blocks; there the uniform estimate above is the best available.
-            const rows = syntaxEl ? syntaxEl.children : null;
-            const row = rows && rows[lineNum - 1];
-            if (row && row.classList.contains('row')) caretTop = row.offsetTop;
-        }
-
-        const viewTop = scroll.scrollTop;
-        const viewBottom = viewTop + scroll.clientHeight;
-
-        if (caretTop < viewTop + m.padTop) {
-            scroll.scrollTop = caretTop - m.padTop;
-        } else if (caretTop + m.lineHeight > viewBottom - m.padTop) {
-            scroll.scrollTop = caretTop + m.lineHeight - scroll.clientHeight + m.padTop;
-        }
-
-        // Wrapped text never scrolls sideways
-        if (wrapped) return;
-
-        const caretLeft = colNum * m.charWidth + m.padLeft;
-        const viewLeft = scroll.scrollLeft;
-        const viewRight = viewLeft + scroll.clientWidth;
-
-        if (caretLeft < viewLeft + m.padLeft) {
-            scroll.scrollLeft = caretLeft - m.padLeft;
-        } else if (caretLeft > viewRight - m.padLeft * 2) {
-            scroll.scrollLeft = caretLeft - scroll.clientWidth + m.padLeft * 2;
-        }
-    }
-
-    function scrollToCaret() {
-        ensureCaretVisible(elements.editor, elements.editorScroll, elements.syntaxHighlight);
-    }
-
-    function scrollToCaretCompare(side) {
-        ensureCaretVisible(
-            side === 'a' ? elements.compareJsonA : elements.compareJsonB,
-            side === 'a' ? elements.compareScrollA : elements.compareScrollB,
-            null
+      function syncAria() {
+        head.setAttribute(
+          "aria-expanded",
+          drawer.classList.contains("collapsed") ? "false" : "true",
         );
+      }
+    });
+  }
+
+  function initWrap() {
+    const container = elements.editor.container;
+    if (!container || !elements.sourceWrapBtn) return;
+
+    let wrapped = false;
+    try {
+      wrapped = localStorage.getItem("jv-wrap") === "1";
+    } catch (e) {
+      /* storage unavailable */
     }
 
-    function refreshCompareEditor(side) {
-        if (side === 'a') {
-            updateLineNumbersFor(elements.compareJsonA, elements.compareLineNumbersA, compareErrorLineA);
-            updateSyntaxHighlightFor(elements.compareJsonA, elements.compareSyntaxA, compareErrorLineA);
-        } else {
-            updateLineNumbersFor(elements.compareJsonB, elements.compareLineNumbersB, compareErrorLineB);
-            updateSyntaxHighlightFor(elements.compareJsonB, elements.compareSyntaxB, compareErrorLineB);
-        }
+    apply();
+    elements.sourceWrapBtn.addEventListener("click", () => {
+      wrapped = !wrapped;
+      apply();
+      try {
+        localStorage.setItem("jv-wrap", wrapped ? "1" : "0");
+      } catch (e) {
+        /* storage unavailable */
+      }
+    });
+
+    function apply() {
+      elements.editor.setWrapped(wrapped);
+      elements.sourceWrapBtn.classList.toggle("active", wrapped);
+      elements.sourceWrapBtn.title = wrapped
+        ? "Word wrap: on"
+        : "Word wrap: off";
+    }
+  }
+
+  function initShortcuts() {
+    document.addEventListener("keydown", (e) => {
+      // Mode switching is bound to Alt+digit, not Ctrl/Cmd+digit: browsers
+      // reserve Ctrl+1..8 (and Cmd+1..8 on macOS) for tab switching and do
+      // not let a page cancel it. Ctrl is accepted too for the platforms
+      // where it happens to be free.
+      // Matched on e.code, because Option+3 on macOS reports e.key as '£'
+      // and non-Latin layouts remap e.key as well.
+      const modeIndex = ["Digit1", "Digit2", "Digit3", "Digit4"].indexOf(
+        e.code,
+      );
+      if (
+        modeIndex >= 0 &&
+        (e.altKey || e.ctrlKey) &&
+        !e.metaKey &&
+        !e.shiftKey
+      ) {
+        e.preventDefault();
+        navigate(MODES[modeIndex]);
+        return;
+      }
+
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === "F" || e.key === "f")
+      ) {
+        e.preventDefault();
+        formatJson();
+      }
+    });
+  }
+
+  function handleEditorInput() {
+    documentRevision++;
+    if (equivalentParse && equivalentParse.text !== elements.editor.value)
+      equivalentParse = undefined;
+    currentJson = undefined;
+    currentBsonData = currentMsgpackData = currentCborData = null;
+    elements.editor.setError(null);
+    setStatus("pending");
+    clearValidationResult();
+    updateCursorStatus();
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(validateJson, 250);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveToStorage, 1000);
+  }
+
+  // ============ Status bar ============
+  function updateStatusBar() {
+    const value = elements.editor.value;
+    const lineCount = value === "" ? 0 : elements.editor.lineCount;
+    const byteCount = new TextEncoder().encode(value).length;
+
+    elements.sbLines.textContent =
+      lineCount + (lineCount === 1 ? " line" : " lines");
+    elements.sbSize.textContent = formatBytes(byteCount);
+
+    const nodeCount = currentJson === undefined ? 0 : parsedNodeCount;
+    elements.sbNodes.textContent =
+      nodeCount + (nodeCount === 1 ? " node" : " nodes");
+
+    if (jsonError) {
+      elements.sbError.hidden = false;
+      elements.sbError.textContent = jsonError;
+    } else {
+      elements.sbError.hidden = true;
+      elements.sbError.textContent = "";
+    }
+  }
+
+  function updateCursorStatus() {
+    const { line, column } = elements.editor.cursor;
+    elements.sbCursor.textContent = "Ln " + line + ", Col " + column;
+  }
+
+  function saveToStorage() {
+    try {
+      localStorage.setItem(STORAGE_KEY, elements.editor.value);
+    } catch (e) {
+      // Silently fail if localStorage is not available or full
+      console.warn("Failed to save to localStorage:", e);
+    }
+  }
+
+  function loadFromStorage() {
+    try {
+      return localStorage.getItem(STORAGE_KEY);
+    } catch (e) {
+      console.warn("Failed to load from localStorage:", e);
+      return null;
+    }
+  }
+
+  function clearStorage() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      // Silently fail
+    }
+  }
+
+  function refreshCompareEditor(side) {
+    const editor = side === "a" ? elements.compareJsonA : elements.compareJsonB;
+    editor.setError(side === "a" ? compareErrorLineA : compareErrorLineB);
+  }
+
+  async function validateJson() {
+    clearTimeout(debounceTimer);
+    const value = elements.editor.value;
+    if (parsedText === value && currentJson !== undefined) {
+      refreshActiveView();
+      return;
+    }
+    const revision = documentRevision;
+    if (equivalentParse?.text === value) {
+      currentJson = equivalentParse.value;
+      parsedNodeCount = equivalentParse.count;
+      equivalentParse = undefined;
+      parsedText = value;
+      jsonError = null;
+      errorLine = null;
+      setStatus("valid");
+      updateStatusBar();
+      refreshActiveView();
+      return;
+    }
+    equivalentParse = undefined;
+    if (!value.trim()) {
+      currentJson = undefined;
+      jsonError = null;
+      errorLine = null;
+      parsedNodeCount = 0;
+      parsedText = value;
+      elements.editor.setError(null);
+      setStatus("empty");
+      updateStatusBar();
+      refreshActiveView();
+      return;
+    }
+    try {
+      const result = await task("parse", { text: value });
+      if (revision !== documentRevision || value !== elements.editor.value)
+        return;
+      currentJson = reviveParsed(result.value, result.numbers);
+      parsedNodeCount = result.count;
+      jsonError = null;
+      errorLine = null;
+      setStatus("valid");
+    } catch (e) {
+      if (revision !== documentRevision || value !== elements.editor.value)
+        return;
+      currentJson = undefined;
+      jsonError = e.message;
+      errorLine = getErrorLine(e.message, value);
+      setStatus("invalid", e.message);
+    }
+    parsedText = value;
+    elements.editor.setError(errorLine);
+    updateStatusBar();
+    refreshActiveView();
+  }
+
+  function getErrorLine(errorMessage, code) {
+    // Try to extract line number from different browser formats
+
+    // Firefox: "at line X column Y"
+    let match = errorMessage.match(/at line (\d+)/i);
+    if (match) {
+      return parseInt(match[1], 10);
     }
 
-    function syncCompareLineNumbers(side) {
-        if (side === 'a') {
-            elements.compareLineNumbersA.scrollTop = elements.compareScrollA.scrollTop;
-        } else {
-            elements.compareLineNumbersB.scrollTop = elements.compareScrollB.scrollTop;
-        }
+    // Chrome/V8: "at position X" - need to convert position to line
+    match = errorMessage.match(/at position (\d+)/i);
+    if (match) {
+      const position = parseInt(match[1], 10);
+      return positionToLine(code, position);
     }
 
-    function handleKeyDown(e) {
-        // Tab key handling
-        if (e.key === 'Tab') {
-            e.preventDefault();
-            const start = elements.editor.selectionStart;
-            const end = elements.editor.selectionEnd;
-            const value = elements.editor.value;
-            
-            elements.editor.value = value.substring(0, start) + '  ' + value.substring(end);
-            elements.editor.selectionStart = elements.editor.selectionEnd = start + 2;
-            handleEditorInput();
-        }
+    // Chrome/V8: "Unexpected token X in JSON at position Y"
+    match = errorMessage.match(/position (\d+)/i);
+    if (match) {
+      const position = parseInt(match[1], 10);
+      return positionToLine(code, position);
     }
 
-    function syncLineNumbers() {
-        elements.lineNumbers.scrollTop = elements.editorScroll.scrollTop;
+    // Safari: might use different format, try line number
+    match = errorMessage.match(/line (\d+)/i);
+    if (match) {
+      return parseInt(match[1], 10);
     }
 
-    function updateLineNumbers() {
-        updateLineNumbersFor(elements.editor, elements.lineNumbers, errorLine);
-        alignGutterToWrap();
+    return null;
+  }
+
+  function positionToLine(code, position) {
+    if (position < 0 || position > code.length) return null;
+    const textBefore = code.substring(0, position);
+    return textBefore.split("\n").length;
+  }
+
+  function setStatus(status, message = "") {
+    const badge = elements.statusBadge;
+    const icon = badge.querySelector(".material-icons");
+    const text = badge.querySelector(".status-text");
+
+    badge.classList.remove("error");
+
+    switch (status) {
+      case "pending":
+        icon.textContent = "hourglass_empty";
+        text.textContent = "Checking JSON";
+        break;
+      case "valid":
+        icon.textContent = "check_circle";
+        text.textContent = "Valid JSON";
+        break;
+      case "invalid":
+        badge.classList.add("error");
+        icon.textContent = "error";
+        text.textContent = "Invalid JSON";
+        break;
+      case "empty":
+        icon.textContent = "remove_circle_outline";
+        text.textContent = "Empty";
+        break;
     }
+  }
 
-    function updateSyntaxHighlight() {
-        updateSyntaxHighlightFor(elements.editor, elements.syntaxHighlight, errorLine);
-        alignGutterToWrap();
-    }
-
-    function highlightSyntax(code) {
-        // Escape HTML
-        let escaped = code
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-
-        // Tokenize and highlight
-        // Strings
-        escaped = escaped.replace(/"([^"\\]|\\.)*"/g, match => {
-            // Check if it's a key (followed by :)
-            return `<span class="string">${match}</span>`;
-        });
-
-        // Numbers
-        escaped = escaped.replace(/\b(-?\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, '<span class="number">$1</span>');
-
-        // Boolean
-        escaped = escaped.replace(/\b(true|false)\b/g, '<span class="boolean">$1</span>');
-
-        // Null
-        escaped = escaped.replace(/\bnull\b/g, '<span class="null">null</span>');
-
-        // Brackets
-        escaped = escaped.replace(/([{}\[\]])/g, '<span class="bracket">$1</span>');
-
-        // Keys (strings before colons)
-        escaped = escaped.replace(/<span class="string">("(?:[^"\\]|\\.)*")<\/span>\s*:/g, 
-            '<span class="key">$1</span>:');
-
-        return escaped;
-    }
-
-    function updateLineNumbersFor(textareaEl, lineNumbersEl, errorLineNum) {
-        const lines = textareaEl.value.split('\n');
-        const count = lines.length;
-        let html = '';
-        for (let i = 1; i <= count; i++) {
-            if (errorLineNum === i) {
-                html += `<span class="error">${i}</span>`;
-            } else {
-                html += `<span>${i}</span>`;
-            }
-        }
-        lineNumbersEl.innerHTML = html;
-    }
-
-    function updateSyntaxHighlightFor(textareaEl, syntaxEl, errorLineNum) {
-        const code = textareaEl.value;
-        if (code.length > 2000000) {
-            syntaxEl.textContent = code + '\n';
-            return;
-        }
-        const html = highlightSyntax(code);
-        const container = syntaxEl.closest('.editor-container');
-
-        // In wrap mode every logical line becomes its own block so the gutter can
-        // measure how many visual rows it actually occupies. No highlight token
-        // spans a newline, so splitting on '\n' cannot break the markup.
-        // Past a certain size the per-line measurement costs more than the gutter
-        // is worth, so fall back to plain wrapping with the gutter hidden.
-        if (isWrapped(syntaxEl)) {
-            const tooBig = code.length > WRAP_ALIGN_MAX_CHARS;
-            if (container) container.classList.toggle('wrap-plain', tooBig);
-            syntaxEl.innerHTML = tooBig
-                ? markErrorLine(html, errorLineNum) + '\n'
-                : toWrappedRows(html, errorLineNum);
-            return;
-        }
-
-        if (container) container.classList.remove('wrap-plain');
-        syntaxEl.innerHTML = markErrorLine(html, errorLineNum) + '\n';
-    }
-
-    function markErrorLine(html, errorLineNum) {
-        if (errorLineNum === null) return html;
-        const lines = html.split('\n');
-        if (errorLineNum < 1 || errorLineNum > lines.length) return html;
-        lines[errorLineNum - 1] = `<span class="error-line">${lines[errorLineNum - 1]}</span>`;
-        return lines.join('\n');
-    }
-
-    function toWrappedRows(html, errorLineNum) {
-        return html.split('\n').map((line, i) => {
-            const cls = (i + 1) === errorLineNum ? 'row error-line' : 'row';
-            return `<span class="${cls}">${line}</span>`;
-        }).join('');
-    }
-
-    function isWrapped(el) {
-        const container = el.closest('.editor-container');
-        return !!container && container.classList.contains('wrap');
-    }
-
-    // Give each gutter number the height its logical line really renders at, so
-    // the number stays pinned to the line's first visual row. The gutter is
-    // rebuilt from scratch by updateLineNumbersFor, so no inline height ever
-    // needs clearing here.
-    function alignGutterToWrap() {
-        if (!isWrapped(elements.syntaxHighlight)) return;
-
-        const rows = elements.syntaxHighlight.children;
-        const numbers = elements.lineNumbers.children;
-        // Mismatched counts mean one half is mid-update, or the document is too
-        // large and rendered without per-line blocks; the next call fixes it.
-        if (!rows.length || rows.length !== numbers.length) return;
-
-        // Read every height, then write every height. Interleaving the two forces
-        // a full layout per line and locks the tab up on large documents.
-        const heights = new Array(rows.length);
-        for (let i = 0; i < rows.length; i++) heights[i] = rows[i].offsetHeight;
-        for (let i = 0; i < numbers.length; i++) numbers[i].style.height = heights[i] + 'px';
-    }
-
-    function validateJson() {
-        const value = elements.editor.value.trim();
-        
-        if (!value) {
-            setStatus('empty');
-            currentJson = null;
-            jsonError = null;
-            errorLine = null;
-            updateLineNumbers();
-            updateSyntaxHighlight();
-            updateStatusBar();
-            refreshActiveView();
-            return;
-        }
-
-        try {
-            currentJson = JSON.parse(value);
-            jsonError = null;
-            errorLine = null;
-            setStatus('valid');
-            updateLineNumbers();
-            updateSyntaxHighlight();
-        } catch (e) {
-            currentJson = null;
-            jsonError = e.message;
-            errorLine = getErrorLine(e.message, elements.editor.value);
-            setStatus('invalid', e.message);
-            updateLineNumbers();
-            updateSyntaxHighlight();
-        }
-
-        updateStatusBar();
-        refreshActiveView();
-    }
-
-    function getErrorLine(errorMessage, code) {
-        // Try to extract line number from different browser formats
-        
-        // Firefox: "at line X column Y"
-        let match = errorMessage.match(/at line (\d+)/i);
-        if (match) {
-            return parseInt(match[1], 10);
-        }
-        
-        // Chrome/V8: "at position X" - need to convert position to line
-        match = errorMessage.match(/at position (\d+)/i);
-        if (match) {
-            const position = parseInt(match[1], 10);
-            return positionToLine(code, position);
-        }
-        
-        // Chrome/V8: "Unexpected token X in JSON at position Y"
-        match = errorMessage.match(/position (\d+)/i);
-        if (match) {
-            const position = parseInt(match[1], 10);
-            return positionToLine(code, position);
-        }
-        
-        // Safari: might use different format, try line number
-        match = errorMessage.match(/line (\d+)/i);
-        if (match) {
-            return parseInt(match[1], 10);
-        }
-        
-        return null;
-    }
-
-    function positionToLine(code, position) {
-        if (position < 0 || position > code.length) return null;
-        const textBefore = code.substring(0, position);
-        return textBefore.split('\n').length;
-    }
-
-    function setStatus(status, message = '') {
-        const badge = elements.statusBadge;
-        const icon = badge.querySelector('.material-icons');
-        const text = badge.querySelector('.status-text');
-
-        badge.classList.remove('error');
-
-        switch (status) {
-            case 'valid':
-                icon.textContent = 'check_circle';
-                text.textContent = 'Valid JSON';
-                break;
-            case 'invalid':
-                badge.classList.add('error');
-                icon.textContent = 'error';
-                text.textContent = 'Invalid JSON';
-                break;
-            case 'empty':
-                icon.textContent = 'remove_circle_outline';
-                text.textContent = 'Empty';
-                break;
-        }
-    }
-
-    function formatJson() {
-        if (!elements.editor.value.trim()) {
-            showToast('Nothing to format', 'error');
-            return;
-        }
-
-        try {
-            const obj = JSON.parse(elements.editor.value);
-            elements.editor.value = JSON.stringify(obj, null, 2);
-            handleEditorInput();
-            showToast('JSON formatted', 'success');
-        } catch (e) {
-            showToast('Invalid JSON: ' + e.message, 'error');
-        }
-    }
-
-    function minifyJson() {
-        if (!elements.editor.value.trim()) {
-            showToast('Nothing to minify', 'error');
-            return;
-        }
-
-        try {
-            const obj = JSON.parse(elements.editor.value);
-            elements.editor.value = JSON.stringify(obj);
-            handleEditorInput();
-            showToast('JSON minified', 'success');
-        } catch (e) {
-            showToast('Invalid JSON: ' + e.message, 'error');
-        }
-    }
-
-    function copyToClipboard() {
-        if (!elements.editor.value.trim()) {
-            showToast('Nothing to copy', 'error');
-            return;
-        }
-
-        navigator.clipboard.writeText(elements.editor.value).then(() => {
-            showToast('Copied to clipboard', 'success');
-        }).catch(() => {
-            showToast('Failed to copy', 'error');
-        });
-    }
-
-    function clearEditor() {
-        elements.editor.value = '';
-        handleEditorInput();
-        currentJson = null;
-        clearStorage();
-        showToast('Editor cleared', 'success');
-    }
-
-    function downloadJson() {
-        if (!elements.editor.value.trim()) {
-            showToast('Nothing to download', 'error');
-            return;
-        }
-        
-        const blob = new Blob([elements.editor.value], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'data.json';
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('JSON downloaded', 'success');
-    }
-
-    function uploadJson(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const content = e.target.result;
-            elements.editor.value = content;
-            handleEditorInput();
-            showToast('JSON loaded from ' + file.name, 'success');
+  async function formatJson() {
+    await formatDocument(true);
+  }
+  async function formatDocument(pretty) {
+    const text = elements.editor.value;
+    try {
+      const output = await task("format", { text, pretty });
+      if (text !== elements.editor.value) return;
+      if (parsedText === text && currentJson !== undefined)
+        equivalentParse = {
+          text: output,
+          value: currentJson,
+          count: parsedNodeCount,
         };
-        reader.onerror = function() {
-            showToast('Failed to read file', 'error');
-        };
-        reader.readAsText(file);
-        
-        // Reset input
-        event.target.value = '';
+      elements.editor.value = output;
+      handleEditorInput();
+      showToast(pretty ? "JSON formatted" : "JSON minified", "success");
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  }
+
+  async function minifyJson() {
+    await formatDocument(false);
+  }
+
+  function copyToClipboard() {
+    if (!elements.editor.value.trim()) {
+      showToast("Nothing to copy", "error");
+      return;
     }
 
-    // ============ Tree Viewer ============
-    function initTreeViewer() {
-        elements.expandAllBtn.addEventListener('click', expandAll);
-        elements.collapseAllBtn.addEventListener('click', collapseAll);
+    navigator.clipboard
+      .writeText(elements.editor.value)
+      .then(() => {
+        showToast("Copied to clipboard", "success");
+      })
+      .catch(() => {
+        showToast("Failed to copy", "error");
+      });
+  }
+
+  function clearEditor() {
+    elements.editor.value = "";
+    handleEditorInput();
+    currentJson = undefined;
+    clearStorage();
+    showToast("Editor cleared", "success");
+  }
+
+  function downloadJson() {
+    if (!elements.editor.value.trim()) {
+      showToast("Nothing to download", "error");
+      return;
     }
 
-    function renderTree(data) {
-        if (data === null || data === undefined) {
-            elements.treeContent.innerHTML = `
-                <div class="empty-state">
-                    <span class="material-icons">info_outline</span>
-                    <p>Enter valid JSON in the editor to view structure</p>
-                </div>`;
-            return;
-        }
+    const blob = new Blob([elements.editor.value], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "data.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("JSON downloaded", "success");
+  }
 
-        const tree = document.createElement('div');
-        tree.className = 'tree-node';
-        tree.appendChild(createTreeNode(data, 'root', '$'));
-        
-        elements.treeContent.innerHTML = '';
-        elements.treeContent.appendChild(tree);
-        
-        // Reset details panel
-        resetDetails();
+  function uploadJson(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const content = e.target.result;
+      elements.editor.value = content;
+      handleEditorInput();
+      showToast("JSON loaded from " + file.name, "success");
+    };
+    reader.onerror = function () {
+      showToast("Failed to read file", "error");
+    };
+    reader.readAsText(file);
+
+    // Reset input
+    event.target.value = "";
+  }
+
+  // ============ Tree Viewer ============
+  function initTreeViewer() {
+    elements.expandAllBtn.addEventListener("click", expandAll);
+    elements.collapseAllBtn.addEventListener("click", collapseAll);
+  }
+
+  function renderTree(data) {
+    treeView.set(data);
+    resetDetails();
+  }
+
+  function getType(value) {
+    return jsonType(value);
+  }
+
+  function formatValue(value, type) {
+    switch (type) {
+      case "string":
+        return `"${value}"`;
+      case "null":
+        return "null";
+      default:
+        return isLosslessNumber(value) ? value.value : String(value);
+    }
+  }
+
+  function selectNode(element, data, key, path, type) {
+    // Remove previous selection
+    if (selectedNode) {
+      selectedNode.classList.remove("selected");
     }
 
-    function createTreeNode(data, key, path) {
-        const fragment = document.createDocumentFragment();
-        const type = getType(data);
-        
-        const item = document.createElement('div');
-        item.className = 'tree-item';
-        item.dataset.path = path;
-        item.dataset.type = type;
+    element.classList.add("selected");
+    selectedNode = element;
 
-        const isExpandable = type === 'object' || type === 'array';
-        
-        // Toggle icon
-        const toggle = document.createElement('span');
-        toggle.className = 'tree-toggle' + (isExpandable ? '' : ' hidden');
-        toggle.innerHTML = '<span class="material-icons">expand_more</span>';
-        item.appendChild(toggle);
+    showDetails(data, key, path, type);
+  }
 
-        // Key
-        if (key !== 'root') {
-            const keySpan = document.createElement('span');
-            keySpan.className = 'tree-key';
-            keySpan.textContent = type === 'array' ? '' : `"${key}"`;
-            if (type !== 'array' || key !== 'root') {
-                keySpan.textContent = typeof key === 'number' ? `[${key}]` : `"${key}"`;
-                keySpan.style.color = typeof key === 'number' ? 'var(--syntax-number)' : '';
-            }
-            item.appendChild(keySpan);
-        }
+  function showDetails(data, key, path, type) {
+    let html = "";
 
-        if (isExpandable) {
-            const bracket = document.createElement('span');
-            bracket.className = 'tree-bracket';
-            bracket.textContent = type === 'array' ? '[' : '{';
-            item.appendChild(bracket);
-
-            const length = type === 'array' ? data.length : Object.keys(data).length;
-            const preview = document.createElement('span');
-            preview.className = 'tree-preview';
-            preview.textContent = `${length} ${length === 1 ? 'item' : 'items'}`;
-            item.appendChild(preview);
-
-            fragment.appendChild(item);
-
-            // Children container
-            const children = document.createElement('div');
-            children.className = 'tree-children';
-
-            if (type === 'array') {
-                data.forEach((val, idx) => {
-                    children.appendChild(createTreeNode(val, idx, `${path}[${idx}]`));
-                });
-            } else {
-                Object.keys(data).forEach(k => {
-                    children.appendChild(createTreeNode(data[k], k, `${path}.${k}`));
-                });
-            }
-
-            fragment.appendChild(children);
-
-            // Closing bracket (same level as opening bracket)
-            const closingItem = document.createElement('div');
-            closingItem.className = 'tree-item';
-            closingItem.style.paddingLeft = '24px';
-            const closingBracket = document.createElement('span');
-            closingBracket.className = 'tree-bracket';
-            closingBracket.textContent = type === 'array' ? ']' : '}';
-            closingItem.appendChild(closingBracket);
-            fragment.appendChild(closingItem);
-
-            // Toggle functionality
-            toggle.addEventListener('click', (e) => {
-                e.stopPropagation();
-                toggle.classList.toggle('collapsed');
-                children.classList.toggle('collapsed');
-                closingItem.classList.toggle('collapsed');
-            });
-        } else {
-            const value = document.createElement('span');
-            value.className = 'tree-value ' + type;
-            value.textContent = formatValue(data, type);
-            item.appendChild(value);
-            fragment.appendChild(item);
-        }
-
-        // Click handler for details
-        item.addEventListener('click', (e) => {
-            e.stopPropagation();
-            selectNode(item, data, key, path, type);
-        });
-
-        // Store data reference
-        item._data = data;
-        item._key = key;
-
-        return fragment;
-    }
-
-    function getType(value) {
-        if (value === null) return 'null';
-        if (Array.isArray(value)) return 'array';
-        return typeof value;
-    }
-
-    function formatValue(value, type) {
-        switch (type) {
-            case 'string':
-                return `"${value}"`;
-            case 'null':
-                return 'null';
-            default:
-                return String(value);
-        }
-    }
-
-    function selectNode(element, data, key, path, type) {
-        // Remove previous selection
-        if (selectedNode) {
-            selectedNode.classList.remove('selected');
-        }
-        
-        element.classList.add('selected');
-        selectedNode = element;
-
-        showDetails(data, key, path, type);
-    }
-
-    function showDetails(data, key, path, type) {
-        let html = '';
-
-        // Path
-        html += `
+    // Path
+    html += `
             <div class="detail-section">
                 <div class="detail-label">Path</div>
                 <div class="detail-value path">${escapeHtml(path)}</div>
             </div>`;
 
-        // Key
-        if (key !== 'root') {
-            html += `
+    // Key
+    if (path !== "$") {
+      html += `
                 <div class="detail-section">
                     <div class="detail-label">Key</div>
                     <div class="detail-value">${escapeHtml(String(key))}</div>
                 </div>`;
-        }
+    }
 
-        // Type
-        html += `
+    // Type
+    html += `
             <div class="detail-section">
                 <div class="detail-label">Type</div>
                 <span class="detail-type ${type}">${type}</span>
             </div>`;
 
-        // Value / Stats
-        if (type === 'object') {
-            const keys = Object.keys(data);
-            html += `
+    // Value / Stats
+    if (type === "object") {
+      const keys = Object.keys(data);
+      html += `
                 <div class="detail-section">
                     <div class="detail-label">Properties</div>
                     <div class="detail-stats">
@@ -1289,10 +978,10 @@
                 </div>
                 <div class="detail-section">
                     <div class="detail-label">Keys List</div>
-                    <div class="detail-value">${keys.length > 0 ? escapeHtml(keys.join(', ')) : '(empty)'}</div>
+                    <div class="detail-value">${keys.length > 0 ? escapeHtml(keys.slice(0, 100).join(", ")) + (keys.length > 100 ? " …" : "") : "(empty)"}</div>
                 </div>`;
-        } else if (type === 'array') {
-            html += `
+    } else if (type === "array") {
+      html += `
                 <div class="detail-section">
                     <div class="detail-label">Length</div>
                     <div class="detail-stats">
@@ -1302,15 +991,15 @@
                         </div>
                     </div>
                 </div>`;
-        } else {
-            html += `
+    } else {
+      html += `
                 <div class="detail-section">
                     <div class="detail-label">Value</div>
-                    <div class="detail-value">${escapeHtml(formatValue(data, type))}</div>
+                    <div class="detail-value">${escapeHtml(type === "string" && data.length > 2048 ? formatValue(data.slice(0, 2048), type) + " … (truncated)" : formatValue(data, type))}</div>
                 </div>`;
 
-            if (type === 'string') {
-                html += `
+      if (type === "string") {
+        html += `
                     <div class="detail-section">
                         <div class="detail-label">String Length</div>
                         <div class="detail-stats">
@@ -1320,660 +1009,270 @@
                             </div>
                         </div>
                     </div>`;
-            }
-        }
+      }
+    }
 
-        // Raw JSON preview for objects/arrays
-        if (type === 'object' || type === 'array') {
-            const preview = JSON.stringify(data, null, 2);
-            const truncated = preview.length > 500 ? preview.substring(0, 500) + '...' : preview;
-            html += `
+    // Raw JSON preview for objects/arrays
+    if (type === "object" || type === "array") {
+      const preview = previewSubtree(data);
+      const truncated =
+        preview.length > 500 ? preview.substring(0, 500) + "..." : preview;
+      html += `
                 <div class="detail-section">
                     <div class="detail-label">Preview</div>
                     <div class="detail-value" style="white-space: pre-wrap; max-height: 200px; overflow: auto;">${escapeHtml(truncated)}</div>
                 </div>`;
-        }
-
-        elements.detailsContent.innerHTML = html;
     }
 
-    function resetDetails() {
-        selectedNode = null;
-        elements.detailsContent.innerHTML = `
+    elements.detailsContent.innerHTML = html;
+  }
+
+  function resetDetails() {
+    selectedNode = null;
+    elements.detailsContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">touch_app</span>
                 <p>Click on any element to view details</p>
             </div>`;
-    }
+  }
 
-    function expandAll() {
-        const toggles = elements.treeContent.querySelectorAll('.tree-toggle:not(.hidden)');
-        const children = elements.treeContent.querySelectorAll('.tree-children');
-        
-        toggles.forEach(t => t.classList.remove('collapsed'));
-        children.forEach(c => c.classList.remove('collapsed'));
-    }
+  function expandAll() {
+    treeView.expandAll();
+  }
 
-    function collapseAll() {
-        const toggles = elements.treeContent.querySelectorAll('.tree-toggle:not(.hidden)');
-        const children = elements.treeContent.querySelectorAll('.tree-children');
-        
-        toggles.forEach(t => t.classList.add('collapsed'));
-        children.forEach(c => c.classList.add('collapsed'));
-    }
+  function collapseAll() {
+    treeView.collapseAll();
+  }
 
-    // ============ Schema Generator & Validator ============
-    let currentSchema = null;
-    let schemaStats = { types: {}, properties: 0, required: 0, depth: 0 };
+  // ============ Schema Generator & Validator ============
+  let schemaRevision = 0;
+  let schemaStats = { types: {}, properties: 0, required: 0, depth: 0 };
 
-    function initSchema() {
-        elements.generateSchemaBtn.addEventListener('click', () => {
-            if (currentJson !== null) {
-                generateAndDisplaySchema(currentJson);
-                showToast('Schema generated');
-            } else {
-                showToast('No valid JSON to generate schema from', 'error');
-            }
-        });
-        
-        elements.uploadSchemaInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    elements.schemaEditor.value = event.target.result;
-                    updateSchemaDisplay();
-                    updateSchemaStats();
-                    clearValidationResult();
-                    showToast('Schema loaded');
-                };
-                reader.readAsText(file);
-                e.target.value = '';
-            }
-        });
-        
-        elements.validateBtn.addEventListener('click', validateJsonAgainstSchema);
-        elements.copySchemaBtn.addEventListener('click', copySchema);
-        elements.downloadSchemaBtn.addEventListener('click', downloadSchema);
-        
-        // Schema editor input handling
-        elements.schemaEditor.addEventListener('input', () => {
-            updateSchemaDisplay();
-            retireStaleVerdict();
-            debounce(() => updateSchemaStats(), 300)();
-        });
-        
-        // Sync scroll between textarea and syntax highlight
-        elements.schemaEditorScroll.addEventListener('scroll', () => {
-            const scrollTop = elements.schemaEditorScroll.scrollTop;
-            elements.schemaLineNumbers.scrollTop = scrollTop;
-        }, { passive: true });
-        
-        // Handle tab key in schema editor
-        elements.schemaEditor.addEventListener('keydown', (e) => {
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                const start = elements.schemaEditor.selectionStart;
-                const end = elements.schemaEditor.selectionEnd;
-                elements.schemaEditor.value = elements.schemaEditor.value.substring(0, start) + '  ' + elements.schemaEditor.value.substring(end);
-                elements.schemaEditor.selectionStart = elements.schemaEditor.selectionEnd = start + 2;
-                updateSchemaDisplay();
-            }
-        });
-    }
-    
-    function updateSchemaDisplay() {
-        updateSchemaLineNumbers();
-        updateSchemaSyntaxHighlight();
-    }
-    
-    function updateSchemaLineNumbers() {
-        const lines = elements.schemaEditor.value.split('\n');
-        let html = '';
-        for (let i = 1; i <= lines.length; i++) {
-            html += `<span>${i}</span>`;
-        }
-        elements.schemaLineNumbers.innerHTML = html;
-    }
-    
-    function updateSchemaSyntaxHighlight() {
-        const code = elements.schemaEditor.value;
-        if (code.length > 500000) {
-            // Skip highlighting for very large content
-            elements.schemaSyntaxHighlight.textContent = code + '\n';
-            return;
-        }
-        elements.schemaSyntaxHighlight.innerHTML = highlightSyntax(code) + '\n';
-    }
+  function initSchema() {
+    elements.generateSchemaBtn.addEventListener(
+      "click",
+      generateAndDisplaySchema,
+    );
 
-    function renderSchema(data) {
-        if (data === null || data === undefined) {
-            elements.schemaEditor.value = '';
-            updateSchemaDisplay();
-            elements.schemaInfoContent.innerHTML = `
+    elements.uploadSchemaInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          elements.schemaEditor.value = event.target.result;
+          updateSchemaStats();
+          clearValidationResult();
+          showToast("Schema loaded");
+        };
+        reader.readAsText(file);
+        e.target.value = "";
+      }
+    });
+
+    elements.validateBtn.addEventListener("click", validateJsonAgainstSchema);
+    elements.copySchemaBtn.addEventListener("click", copySchema);
+    elements.downloadSchemaBtn.addEventListener("click", downloadSchema);
+
+    const updateStats = debounce(updateSchemaStats, 300);
+    // Schema editor input handling
+    elements.schemaEditor.addEventListener("input", () => {
+      schemaRevision++;
+      retireStaleVerdict();
+      updateStats();
+    });
+  }
+
+  function renderSchema(data) {
+    if (data === undefined) {
+      elements.schemaEditor.value = "";
+      elements.schemaInfoContent.innerHTML = `
                 <div class="empty-state">
                     <span class="material-icons">info_outline</span>
                     <p>Schema statistics will appear here</p>
                 </div>`;
-            return;
-        }
+      return;
+    }
 
-        generateAndDisplaySchema(data);
+    generateAndDisplaySchema(data);
+  }
+
+  async function generateAndDisplaySchema() {
+    const text = elements.editor.value,
+      revision = schemaRevision,
+      schemaBefore = elements.schemaEditor.value;
+    try {
+      const schema = await task("generate", { text });
+      if (
+        elements.editor.value !== text ||
+        revision !== schemaRevision ||
+        schemaBefore !== elements.schemaEditor.value
+      )
+        return;
+      elements.schemaEditor.value = stringifyJson(schema, null, 2);
+      updateSchemaStats();
+      clearValidationResult();
+    } catch (e) {
+      showToast(e.message, "error");
     }
-    
-    function generateAndDisplaySchema(data) {
-        // Reset stats
-        schemaStats = { types: {}, properties: 0, required: 0, depth: 0 };
-        
-        // Generate schema
-        currentSchema = generateSchema(data, 0);
-        currentSchema.$schema = 'https://json-schema.org/draft/2020-12/schema';
-        
-        // Display in editor
-        const schemaJson = JSON.stringify(currentSchema, null, 2);
-        elements.schemaEditor.value = schemaJson;
-        
-        // Update syntax highlighting and line numbers
-        updateSchemaDisplay();
-        
-        // Render stats
-        renderSchemaStats();
-        
-        // Clear previous validation result
-        clearValidationResult();
-    }
-    
-    function updateSchemaStats() {
-        const schemaText = elements.schemaEditor.value.trim();
-        if (!schemaText) {
-            elements.schemaInfoContent.innerHTML = `
+  }
+
+  function updateSchemaStats() {
+    const schemaText = elements.schemaEditor.value.trim();
+    if (!schemaText) {
+      elements.schemaInfoContent.innerHTML = `
                 <div class="empty-state">
                     <span class="material-icons">info_outline</span>
                     <p>Schema statistics will appear here</p>
                 </div>`;
-            return;
-        }
-        
-        try {
-            const schema = JSON.parse(schemaText);
-            schemaStats = { types: {}, properties: 0, required: 0, depth: 0 };
-            analyzeSchemaStats(schema, 0);
-            renderSchemaStats();
-        } catch (e) {
-            elements.schemaInfoContent.innerHTML = `
+      return;
+    }
+
+    try {
+      const schema = parseJson(schemaText);
+      schemaStats = { types: {}, properties: 0, required: 0, depth: 0 };
+      analyzeSchemaStats(schema, 0);
+      renderSchemaStats();
+    } catch (e) {
+      elements.schemaInfoContent.innerHTML = `
                 <div class="empty-state">
                     <span class="material-icons">error_outline</span>
                     <p>Invalid JSON in schema</p>
                 </div>`;
-        }
     }
-    
-    function analyzeSchemaStats(schema, depth) {
-        if (!schema || typeof schema !== 'object') return;
-        
-        schemaStats.depth = Math.max(schemaStats.depth, depth);
-        
-        if (schema.type) {
-            schemaStats.types[schema.type] = (schemaStats.types[schema.type] || 0) + 1;
-        }
-        
-        if (schema.properties) {
-            const propKeys = Object.keys(schema.properties);
-            schemaStats.properties += propKeys.length;
-            propKeys.forEach(key => {
-                analyzeSchemaStats(schema.properties[key], depth + 1);
-            });
-        }
-        
-        if (schema.required && Array.isArray(schema.required)) {
-            schemaStats.required += schema.required.length;
-        }
-        
-        if (schema.items) {
-            analyzeSchemaStats(schema.items, depth + 1);
-        }
-        
-        if (schema.anyOf) {
-            schema.anyOf.forEach(s => analyzeSchemaStats(s, depth));
-        }
-        
-        if (schema.oneOf) {
-            schema.oneOf.forEach(s => analyzeSchemaStats(s, depth));
-        }
-        
-        if (schema.allOf) {
-            schema.allOf.forEach(s => analyzeSchemaStats(s, depth));
-        }
+  }
+
+  function analyzeSchemaStats(schema, depth) {
+    if (!schema || typeof schema !== "object") return;
+
+    schemaStats.depth = Math.max(schemaStats.depth, depth);
+
+    if (schema.type) {
+      schemaStats.types[schema.type] =
+        (schemaStats.types[schema.type] || 0) + 1;
     }
-    
-    function clearValidationResult() {
-        validatedSnapshot = null;
-        elements.validationContent.innerHTML = `
+
+    if (schema.properties) {
+      const propKeys = Object.keys(schema.properties);
+      schemaStats.properties += propKeys.length;
+      propKeys.forEach((key) => {
+        analyzeSchemaStats(schema.properties[key], depth + 1);
+      });
+    }
+
+    if (schema.required && Array.isArray(schema.required)) {
+      schemaStats.required += schema.required.length;
+    }
+
+    if (schema.items) {
+      analyzeSchemaStats(schema.items, depth + 1);
+    }
+
+    if (schema.anyOf) {
+      schema.anyOf.forEach((s) => analyzeSchemaStats(s, depth));
+    }
+
+    if (schema.oneOf) {
+      schema.oneOf.forEach((s) => analyzeSchemaStats(s, depth));
+    }
+
+    if (schema.allOf) {
+      schema.allOf.forEach((s) => analyzeSchemaStats(s, depth));
+    }
+  }
+
+  function clearValidationResult() {
+    validatedSnapshot = null;
+    elements.validationContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">pending</span>
                 <p>Click Validate to check JSON against schema</p>
             </div>`;
+  }
+
+  async function validateJsonAgainstSchema() {
+    const schemaText = elements.schemaEditor.value.trim();
+    const text = elements.editor.value;
+
+    if (!schemaText) {
+      showToast("No schema to validate against", "error");
+      return;
     }
-    
-    function validateJsonAgainstSchema() {
-        const schemaText = elements.schemaEditor.value.trim();
 
-        if (!schemaText) {
-            showToast('No schema to validate against', 'error');
-            return;
-        }
+    // Remember what was judged, so the verdict can be retired once either
+    // side changes. The source pane is visible next to this report now, so a
+    // stale "valid" would be read as current.
+    validatedSnapshot = elements.editor.value + "\0" + schemaText;
 
-        // Remember what was judged, so the verdict can be retired once either
-        // side changes. The source pane is visible next to this report now, so a
-        // stale "valid" would be read as current.
-        validatedSnapshot = elements.editor.value + ' ' + schemaText;
+    let errors;
+    try {
+      errors = await task("schema", { text, schema: schemaText });
+    } catch (e) {
+      if (
+        elements.editor.value === text &&
+        elements.schemaEditor.value.trim() === schemaText
+      ) {
+        elements.validationContent.textContent =
+          "Validation error: " + e.message;
+      }
+      return;
+    }
+    if (
+      elements.editor.value !== text ||
+      elements.schemaEditor.value.trim() !== schemaText
+    )
+      return;
 
-        let schema;
-        try {
-            schema = JSON.parse(schemaText);
-        } catch (e) {
-            elements.validationContent.innerHTML = `
-                <div class="validation-result invalid">
-                    <span class="material-icons">error</span>
-                    <span>Invalid schema JSON: ${escapeHtml(e.message)}</span>
-                </div>`;
-            return;
-        }
-        
-        if (currentJson === null) {
-            elements.validationContent.innerHTML = `
-                <div class="validation-result invalid">
-                    <span class="material-icons">error</span>
-                    <span>No valid JSON data to validate</span>
-                </div>`;
-            return;
-        }
-        
-        // Perform validation
-        const errors = validateValue(currentJson, schema, '');
-        
-        if (errors.length === 0) {
-            elements.validationContent.innerHTML = `
+    if (errors.length === 0) {
+      elements.validationContent.innerHTML = `
                 <div class="validation-result valid">
                     <span class="material-icons">check_circle</span>
                     <span>JSON is valid against schema</span>
                 </div>`;
-            showToast('Validation passed');
-        } else {
-            let html = `
+      showToast("Validation passed");
+    } else {
+      let html = `
                 <div class="validation-result invalid">
                     <span class="material-icons">cancel</span>
-                    <span>Validation failed (${errors.length} error${errors.length > 1 ? 's' : ''})</span>
+                    <span>Validation failed (${errors.length} error${errors.length > 1 ? "s" : ""})</span>
                 </div>
                 <div class="validation-errors">`;
-            
-            errors.slice(0, 50).forEach(err => {
-                html += `
+
+      errors.slice(0, 50).forEach((err) => {
+        html += `
                     <div class="validation-error-item">
-                        <span class="validation-error-path">${escapeHtml(err.path || '(root)')}</span>
+                        <span class="validation-error-path">${escapeHtml(err.path || "(root)")}</span>
                         <span class="validation-error-message">${escapeHtml(err.message)}</span>
                     </div>`;
-            });
-            
-            if (errors.length > 50) {
-                html += `<div class="validation-error-item">
+      });
+
+      if (errors.length > 50) {
+        html += `<div class="validation-error-item">
                     <span class="validation-error-message">...and ${errors.length - 50} more errors</span>
                 </div>`;
-            }
-            
-            html += '</div>';
-            elements.validationContent.innerHTML = html;
-            showToast(`Validation failed: ${errors.length} error(s)`, 'error');
-        }
-    }
-    
-    // Simple JSON Schema validator
-    function validateValue(value, schema, path) {
-        const errors = [];
-        
-        if (!schema || typeof schema !== 'object') {
-            return errors;
-        }
-        
-        // Handle anyOf
-        if (schema.anyOf) {
-            const anyOfErrors = [];
-            let valid = false;
-            for (const subSchema of schema.anyOf) {
-                const subErrors = validateValue(value, subSchema, path);
-                if (subErrors.length === 0) {
-                    valid = true;
-                    break;
-                }
-                anyOfErrors.push(...subErrors);
-            }
-            if (!valid) {
-                errors.push({ path, message: 'Does not match any of the allowed schemas' });
-            }
-            return errors;
-        }
-        
-        // Handle oneOf
-        if (schema.oneOf) {
-            let matchCount = 0;
-            for (const subSchema of schema.oneOf) {
-                const subErrors = validateValue(value, subSchema, path);
-                if (subErrors.length === 0) matchCount++;
-            }
-            if (matchCount !== 1) {
-                errors.push({ path, message: `Must match exactly one schema (matched ${matchCount})` });
-            }
-            return errors;
-        }
-        
-        // Handle allOf
-        if (schema.allOf) {
-            for (const subSchema of schema.allOf) {
-                errors.push(...validateValue(value, subSchema, path));
-            }
-            return errors;
-        }
-        
-        // Type validation
-        if (schema.type) {
-            const actualType = getJsonType(value);
-            const expectedTypes = Array.isArray(schema.type) ? schema.type : [schema.type];
-            
-            if (!expectedTypes.includes(actualType)) {
-                // Special case: integer is also a number
-                if (!(actualType === 'integer' && expectedTypes.includes('number'))) {
-                    errors.push({ path, message: `Expected ${expectedTypes.join(' or ')}, got ${actualType}` });
-                    return errors;
-                }
-            }
-        }
-        
-        // Enum validation
-        if (schema.enum) {
-            if (!schema.enum.some(e => JSON.stringify(e) === JSON.stringify(value))) {
-                errors.push({ path, message: `Value must be one of: ${JSON.stringify(schema.enum)}` });
-            }
-        }
-        
-        // Const validation
-        if (schema.const !== undefined) {
-            if (JSON.stringify(value) !== JSON.stringify(schema.const)) {
-                errors.push({ path, message: `Value must be ${JSON.stringify(schema.const)}` });
-            }
-        }
-        
-        // String validations
-        if (typeof value === 'string') {
-            if (schema.minLength !== undefined && value.length < schema.minLength) {
-                errors.push({ path, message: `String length must be >= ${schema.minLength}` });
-            }
-            if (schema.maxLength !== undefined && value.length > schema.maxLength) {
-                errors.push({ path, message: `String length must be <= ${schema.maxLength}` });
-            }
-            if (schema.pattern) {
-                try {
-                    const regex = new RegExp(schema.pattern);
-                    if (!regex.test(value)) {
-                        errors.push({ path, message: `String must match pattern: ${schema.pattern}` });
-                    }
-                } catch (e) {
-                    // Invalid regex in schema
-                }
-            }
-        }
-        
-        // Number validations
-        if (typeof value === 'number') {
-            if (schema.minimum !== undefined && value < schema.minimum) {
-                errors.push({ path, message: `Value must be >= ${schema.minimum}` });
-            }
-            if (schema.maximum !== undefined && value > schema.maximum) {
-                errors.push({ path, message: `Value must be <= ${schema.maximum}` });
-            }
-            if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) {
-                errors.push({ path, message: `Value must be > ${schema.exclusiveMinimum}` });
-            }
-            if (schema.exclusiveMaximum !== undefined && value >= schema.exclusiveMaximum) {
-                errors.push({ path, message: `Value must be < ${schema.exclusiveMaximum}` });
-            }
-            if (schema.multipleOf !== undefined && value % schema.multipleOf !== 0) {
-                errors.push({ path, message: `Value must be multiple of ${schema.multipleOf}` });
-            }
-        }
-        
-        // Array validations
-        if (Array.isArray(value)) {
-            if (schema.minItems !== undefined && value.length < schema.minItems) {
-                errors.push({ path, message: `Array must have >= ${schema.minItems} items` });
-            }
-            if (schema.maxItems !== undefined && value.length > schema.maxItems) {
-                errors.push({ path, message: `Array must have <= ${schema.maxItems} items` });
-            }
-            if (schema.uniqueItems && new Set(value.map(JSON.stringify)).size !== value.length) {
-                errors.push({ path, message: 'Array items must be unique' });
-            }
-            
-            // Validate items
-            if (schema.items) {
-                value.forEach((item, index) => {
-                    const itemPath = path ? `${path}[${index}]` : `[${index}]`;
-                    errors.push(...validateValue(item, schema.items, itemPath));
-                });
-            }
-        }
-        
-        // Object validations
-        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-            const keys = Object.keys(value);
-            
-            // Required properties
-            if (schema.required) {
-                for (const req of schema.required) {
-                    if (!(req in value)) {
-                        errors.push({ path, message: `Missing required property: ${req}` });
-                    }
-                }
-            }
-            
-            // Property count
-            if (schema.minProperties !== undefined && keys.length < schema.minProperties) {
-                errors.push({ path, message: `Object must have >= ${schema.minProperties} properties` });
-            }
-            if (schema.maxProperties !== undefined && keys.length > schema.maxProperties) {
-                errors.push({ path, message: `Object must have <= ${schema.maxProperties} properties` });
-            }
-            
-            // Validate properties
-            if (schema.properties) {
-                for (const key of keys) {
-                    if (schema.properties[key]) {
-                        const propPath = path ? `${path}.${key}` : key;
-                        errors.push(...validateValue(value[key], schema.properties[key], propPath));
-                    }
-                }
-            }
-            
-            // Additional properties
-            if (schema.additionalProperties === false) {
-                const allowedKeys = Object.keys(schema.properties || {});
-                const patternKeys = schema.patternProperties ? Object.keys(schema.patternProperties) : [];
-                
-                for (const key of keys) {
-                    if (!allowedKeys.includes(key)) {
-                        let matchesPattern = false;
-                        for (const pattern of patternKeys) {
-                            try {
-                                if (new RegExp(pattern).test(key)) {
-                                    matchesPattern = true;
-                                    break;
-                                }
-                            } catch (e) {}
-                        }
-                        if (!matchesPattern) {
-                            errors.push({ path, message: `Additional property not allowed: ${key}` });
-                        }
-                    }
-                }
-            }
-        }
-        
-        return errors;
-    }
-    
-    function getJsonType(value) {
-        if (value === null) return 'null';
-        if (Array.isArray(value)) return 'array';
-        if (typeof value === 'number') {
-            return Number.isInteger(value) ? 'integer' : 'number';
-        }
-        return typeof value;
-    }
-    
-    function debounce(func, wait) {
-        let timeout;
-        return function(...args) {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), wait);
-        };
-    }
+      }
 
-    function generateSchema(value, depth) {
-        schemaStats.depth = Math.max(schemaStats.depth, depth);
-        const type = getType(value);
-        
-        // Count types
-        schemaStats.types[type] = (schemaStats.types[type] || 0) + 1;
-
-        switch (type) {
-            case 'null':
-                return { type: 'null' };
-            
-            case 'boolean':
-                return { type: 'boolean' };
-            
-            case 'number':
-                if (Number.isInteger(value)) {
-                    return { type: 'integer' };
-                }
-                return { type: 'number' };
-            
-            case 'string':
-                const schema = { type: 'string' };
-                // Detect common formats
-                if (isDateTimeString(value)) {
-                    schema.format = 'date-time';
-                } else if (isDateString(value)) {
-                    schema.format = 'date';
-                } else if (isEmailString(value)) {
-                    schema.format = 'email';
-                } else if (isUriString(value)) {
-                    schema.format = 'uri';
-                } else if (isUuidString(value)) {
-                    schema.format = 'uuid';
-                }
-                return schema;
-            
-            case 'array':
-                if (value.length === 0) {
-                    return { type: 'array', items: {} };
-                }
-                // Analyze all items to create a unified schema
-                const itemSchemas = value.map(item => generateSchema(item, depth + 1));
-                const mergedItems = mergeSchemas(itemSchemas);
-                return { type: 'array', items: mergedItems };
-            
-            case 'object':
-                const properties = {};
-                const required = [];
-                
-                for (const key of Object.keys(value)) {
-                    schemaStats.properties++;
-                    properties[key] = generateSchema(value[key], depth + 1);
-                    required.push(key);
-                    schemaStats.required++;
-                }
-                
-                const objSchema = { type: 'object' };
-                if (Object.keys(properties).length > 0) {
-                    objSchema.properties = properties;
-                    objSchema.required = required;
-                }
-                return objSchema;
-            
-            default:
-                return {};
-        }
+      html += "</div>";
+      elements.validationContent.innerHTML = html;
+      showToast(`Validation failed: ${errors.length} error(s)`, "error");
     }
+  }
 
-    function mergeSchemas(schemas) {
-        if (schemas.length === 0) return {};
-        if (schemas.length === 1) return schemas[0];
-        
-        // Get unique types
-        const types = [...new Set(schemas.map(s => s.type))];
-        
-        if (types.length === 1) {
-            // All same type - merge properties if objects
-            if (types[0] === 'object') {
-                const merged = { type: 'object', properties: {} };
-                const allRequired = new Set();
-                const propCounts = {};
-                
-                schemas.forEach(schema => {
-                    if (schema.properties) {
-                        Object.keys(schema.properties).forEach(key => {
-                            propCounts[key] = (propCounts[key] || 0) + 1;
-                            if (!merged.properties[key]) {
-                                merged.properties[key] = schema.properties[key];
-                            }
-                        });
-                    }
-                });
-                
-                // Only mark as required if present in all items
-                const requiredProps = Object.keys(propCounts).filter(
-                    key => propCounts[key] === schemas.length
-                );
-                if (requiredProps.length > 0) {
-                    merged.required = requiredProps;
-                }
-                
-                return merged;
-            }
-            return schemas[0];
-        }
-        
-        // Multiple types - use anyOf
-        return { anyOf: schemas };
-    }
+  // Simple JSON Schema validator
 
-    // Format detection helpers
-    function isDateTimeString(str) {
-        return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(str);
-    }
+  function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+  }
 
-    function isDateString(str) {
-        return /^\d{4}-\d{2}-\d{2}$/.test(str);
-    }
+  function renderSchemaStats() {
+    let html = "";
 
-    function isEmailString(str) {
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
-    }
-
-    function isUriString(str) {
-        return /^https?:\/\//.test(str);
-    }
-
-    function isUuidString(str) {
-        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-    }
-
-    function renderSchemaStats() {
-        let html = '';
-        
-        // Stats grid
-        html += '<div class="schema-stat-grid">';
-        html += `
+    // Stats grid
+    html += '<div class="schema-stat-grid">';
+    html += `
             <div class="schema-stat-card">
                 <div class="stat-value">${schemaStats.properties}</div>
                 <div class="stat-label">Properties</div>
@@ -1991,363 +1290,177 @@
                 <div class="stat-label">Type Count</div>
             </div>
         `;
-        html += '</div>';
-        
-        // Type breakdown
-        html += '<div class="detail-section"><div class="detail-label">Types Used</div></div>';
-        html += '<ul class="schema-type-list">';
-        
-        const typeOrder = ['object', 'array', 'string', 'number', 'boolean', 'null'];
-        const sortedTypes = Object.entries(schemaStats.types).sort((a, b) => {
-            return typeOrder.indexOf(a[0]) - typeOrder.indexOf(b[0]);
-        });
-        
-        for (const [type, count] of sortedTypes) {
-            html += `
+    html += "</div>";
+
+    // Type breakdown
+    html +=
+      '<div class="detail-section"><div class="detail-label">Types Used</div></div>';
+    html += '<ul class="schema-type-list">';
+
+    const typeOrder = [
+      "object",
+      "array",
+      "string",
+      "number",
+      "boolean",
+      "null",
+    ];
+    const sortedTypes = Object.entries(schemaStats.types).sort((a, b) => {
+      return typeOrder.indexOf(a[0]) - typeOrder.indexOf(b[0]);
+    });
+
+    for (const [type, count] of sortedTypes) {
+      html += `
                 <li class="schema-type-item ${type}">
                     <span class="type-name">${type}</span>
-                    <span class="type-count">${count} occurrence${count > 1 ? 's' : ''}</span>
+                    <span class="type-count">${count} occurrence${count > 1 ? "s" : ""}</span>
                 </li>`;
-        }
-        html += '</ul>';
-        
-        elements.schemaInfoContent.innerHTML = html;
+    }
+    html += "</ul>";
+
+    elements.schemaInfoContent.innerHTML = html;
+  }
+
+  function copySchema() {
+    const schemaText = elements.schemaEditor.value.trim();
+    if (!schemaText) {
+      showToast("No schema to copy", "error");
+      return;
     }
 
-    function copySchema() {
-        const schemaText = elements.schemaEditor.value.trim();
-        if (!schemaText) {
-            showToast('No schema to copy', 'error');
-            return;
-        }
-        
-        navigator.clipboard.writeText(schemaText).then(() => {
-            showToast('Schema copied to clipboard', 'success');
-        }).catch(() => {
-            showToast('Failed to copy', 'error');
-        });
+    navigator.clipboard
+      .writeText(schemaText)
+      .then(() => {
+        showToast("Schema copied to clipboard", "success");
+      })
+      .catch(() => {
+        showToast("Failed to copy", "error");
+      });
+  }
+
+  function downloadSchema() {
+    const schemaText = elements.schemaEditor.value.trim();
+    if (!schemaText) {
+      showToast("No schema to download", "error");
+      return;
     }
 
-    function downloadSchema() {
-        const schemaText = elements.schemaEditor.value.trim();
-        if (!schemaText) {
-            showToast('No schema to download', 'error');
-            return;
-        }
-        
-        const blob = new Blob([schemaText], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'schema.json';
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('Schema downloaded', 'success');
+    const blob = new Blob([schemaText], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "schema.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Schema downloaded", "success");
+  }
+
+  // ============ BSON Converter ============
+  let currentBsonData = null;
+
+  function initBson() {
+    elements.copyBsonBtn.addEventListener("click", copyBsonHex);
+    elements.downloadBsonBtn.addEventListener("click", downloadBson);
+    elements.uploadBsonInput.addEventListener("change", uploadBson);
+  }
+
+  async function renderBson(data) {
+    const text = elements.editor.value;
+    if (data === undefined) {
+      showBsonEmpty();
+      return;
     }
 
-    // ============ BSON Converter ============
-    let currentBsonData = null;
+    try {
+      const bytes = await task("encode", { format: "bson", text });
+      if (text !== elements.editor.value) return;
+      currentBsonData = bytes;
+      const hexOutput = formatHexDump(currentBsonData.subarray(0, 4096));
+      elements.bsonContent.innerHTML =
+        `<pre class="bson-hex">${hexOutput}</pre>` +
+        (bytes.length > 4096
+          ? "<p>Preview: first 4096 bytes. Copy or Save exports the full file.</p>"
+          : "");
 
-    function initBson() {
-        elements.copyBsonBtn.addEventListener('click', copyBsonHex);
-        elements.downloadBsonBtn.addEventListener('click', downloadBson);
-        elements.uploadBsonInput.addEventListener('change', uploadBson);
+      renderBsonStats(data);
+    } catch (e) {
+      if (text === elements.editor.value) showBsonError(e.message);
     }
+  }
 
-    function renderBson(data) {
-        if (data === null || data === undefined) {
-            showBsonEmpty();
-            return;
-        }
-
-        try {
-            currentBsonData = encodeBson(data);
-            const hexOutput = formatHexDump(currentBsonData);
-            elements.bsonContent.innerHTML = `<pre class="bson-hex">${hexOutput}</pre>`;
-            
-            renderBsonStats(data);
-        } catch (e) {
-            showBsonError('BSON encoding error: ' + e.message);
-        }
-    }
-
-    function showBsonError(error) {
-        elements.bsonContent.innerHTML = `
+  function showBsonError(error) {
+    elements.bsonContent.innerHTML = `
             <div class="empty-state error-state">
                 <span class="material-icons">error_outline</span>
                 <p>Invalid JSON</p>
                 <p class="error-message">${escapeHtml(error)}</p>
             </div>`;
-        elements.bsonInfoContent.innerHTML = `
+    elements.bsonInfoContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">block</span>
                 <p>Fix JSON errors to generate BSON</p>
             </div>`;
-        currentBsonData = null;
-    }
+    currentBsonData = null;
+  }
 
-    function showBsonEmpty() {
-        elements.bsonContent.innerHTML = `
+  function showBsonEmpty() {
+    elements.bsonContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">info_outline</span>
                 <p>Enter valid JSON in the editor to generate BSON</p>
             </div>`;
-        elements.bsonInfoContent.innerHTML = `
+    elements.bsonInfoContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">compare_arrows</span>
                 <p>Size statistics will appear here</p>
             </div>`;
-        currentBsonData = null;
+    currentBsonData = null;
+  }
+
+  // Lightweight BSON encoder
+
+  function formatHexDump(data) {
+    const lines = [];
+    const bytesPerLine = 16;
+
+    for (let i = 0; i < data.length; i += bytesPerLine) {
+      const offset = i.toString(16).padStart(8, "0");
+      const chunk = data.slice(i, i + bytesPerLine);
+
+      const hex = Array.from(chunk)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join(" ");
+      const hexPadded = hex.padEnd(bytesPerLine * 3 - 1, " ");
+
+      const ascii = Array.from(chunk)
+        .map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : "."))
+        .join("");
+
+      lines.push(
+        `<span class="offset">${offset}</span>  ` +
+          `<span class="hex-byte">${hexPadded}</span>` +
+          `<span class="ascii">${escapeHtml(ascii)}</span>`,
+      );
     }
 
-    // Lightweight BSON encoder
-    function encodeBson(obj) {
-        const parts = [];
-        
-        function writeInt32(value) {
-            const buf = new Uint8Array(4);
-            buf[0] = value & 0xff;
-            buf[1] = (value >> 8) & 0xff;
-            buf[2] = (value >> 16) & 0xff;
-            buf[3] = (value >> 24) & 0xff;
-            return buf;
-        }
-        
-        function writeInt64(value) {
-            const buf = new Uint8Array(8);
-            // Handle as two 32-bit parts for larger numbers
-            const low = value & 0xffffffff;
-            const high = Math.floor(value / 0x100000000) & 0xffffffff;
-            buf[0] = low & 0xff;
-            buf[1] = (low >> 8) & 0xff;
-            buf[2] = (low >> 16) & 0xff;
-            buf[3] = (low >> 24) & 0xff;
-            buf[4] = high & 0xff;
-            buf[5] = (high >> 8) & 0xff;
-            buf[6] = (high >> 16) & 0xff;
-            buf[7] = (high >> 24) & 0xff;
-            return buf;
-        }
-        
-        function writeDouble(value) {
-            const buf = new ArrayBuffer(8);
-            new Float64Array(buf)[0] = value;
-            return new Uint8Array(buf);
-        }
-        
-        function writeCString(str) {
-            const encoder = new TextEncoder();
-            const encoded = encoder.encode(str);
-            const buf = new Uint8Array(encoded.length + 1);
-            buf.set(encoded);
-            buf[encoded.length] = 0;
-            return buf;
-        }
-        
-        function writeString(str) {
-            const encoder = new TextEncoder();
-            const encoded = encoder.encode(str);
-            const len = writeInt32(encoded.length + 1);
-            const buf = new Uint8Array(4 + encoded.length + 1);
-            buf.set(len);
-            buf.set(encoded, 4);
-            buf[4 + encoded.length] = 0;
-            return buf;
-        }
-        
-        function encodeValue(key, value) {
-            const keyBytes = writeCString(key);
-            const type = getType(value);
-            
-            switch (type) {
-                case 'number':
-                    if (Number.isInteger(value) && value >= -2147483648 && value <= 2147483647) {
-                        // Int32
-                        return concatArrays([new Uint8Array([0x10]), keyBytes, writeInt32(value)]);
-                    } else if (Number.isInteger(value)) {
-                        // Int64
-                        return concatArrays([new Uint8Array([0x12]), keyBytes, writeInt64(value)]);
-                    } else {
-                        // Double
-                        return concatArrays([new Uint8Array([0x01]), keyBytes, writeDouble(value)]);
-                    }
-                
-                case 'string':
-                    return concatArrays([new Uint8Array([0x02]), keyBytes, writeString(value)]);
-                
-                case 'boolean':
-                    return concatArrays([new Uint8Array([0x08]), keyBytes, new Uint8Array([value ? 1 : 0])]);
-                
-                case 'null':
-                    return concatArrays([new Uint8Array([0x0A]), keyBytes]);
-                
-                case 'array':
-                    const arrDoc = encodeDocument(value, true);
-                    return concatArrays([new Uint8Array([0x04]), keyBytes, arrDoc]);
-                
-                case 'object':
-                    const objDoc = encodeDocument(value, false);
-                    return concatArrays([new Uint8Array([0x03]), keyBytes, objDoc]);
-                
-                default:
-                    return new Uint8Array(0);
-            }
-        }
-        
-        function encodeDocument(obj, isArray) {
-            const elements = [];
-            const keys = isArray ? Object.keys(obj).map((_, i) => String(i)) : Object.keys(obj);
-            const values = isArray ? obj : keys.map(k => obj[k]);
-            
-            for (let i = 0; i < keys.length; i++) {
-                const key = keys[i];
-                const val = isArray ? obj[i] : obj[key];
-                elements.push(encodeValue(key, val));
-            }
-            
-            const body = concatArrays(elements);
-            const totalLen = 4 + body.length + 1; // size + body + null terminator
-            
-            return concatArrays([writeInt32(totalLen), body, new Uint8Array([0x00])]);
-        }
-        
-        function concatArrays(arrays) {
-            const totalLen = arrays.reduce((sum, arr) => sum + arr.length, 0);
-            const result = new Uint8Array(totalLen);
-            let offset = 0;
-            for (const arr of arrays) {
-                result.set(arr, offset);
-                offset += arr.length;
-            }
-            return result;
-        }
-        
-        return encodeDocument(obj, false);
-    }
+    return lines.join("\n");
+  }
 
-    // BSON decoder (for upload)
-    function decodeBson(buffer) {
-        let offset = 0;
-        const view = new DataView(buffer);
-        
-        function readInt32() {
-            const val = view.getInt32(offset, true);
-            offset += 4;
-            return val;
-        }
-        
-        function readInt64() {
-            const low = view.getUint32(offset, true);
-            const high = view.getInt32(offset + 4, true);
-            offset += 8;
-            return high * 0x100000000 + low;
-        }
-        
-        function readDouble() {
-            const val = view.getFloat64(offset, true);
-            offset += 8;
-            return val;
-        }
-        
-        function readCString() {
-            let end = offset;
-            while (view.getUint8(end) !== 0) end++;
-            const bytes = new Uint8Array(buffer, offset, end - offset);
-            offset = end + 1;
-            return new TextDecoder().decode(bytes);
-        }
-        
-        function readString() {
-            const len = readInt32();
-            const bytes = new Uint8Array(buffer, offset, len - 1);
-            offset += len;
-            return new TextDecoder().decode(bytes);
-        }
-        
-        function readDocument() {
-            const startOffset = offset;
-            const size = readInt32();
-            const obj = {};
-            const isArray = [];
-            let arrayMode = true;
-            let idx = 0;
-            
-            while (offset < startOffset + size - 1) {
-                const type = view.getUint8(offset++);
-                if (type === 0) break;
-                
-                const key = readCString();
-                if (arrayMode && key !== String(idx)) arrayMode = false;
-                idx++;
-                
-                let value;
-                switch (type) {
-                    case 0x01: value = readDouble(); break;
-                    case 0x02: value = readString(); break;
-                    case 0x03: value = readDocument(); break;
-                    case 0x04: value = Object.values(readDocument()); break;
-                    case 0x08: value = view.getUint8(offset++) === 1; break;
-                    case 0x0A: value = null; break;
-                    case 0x10: value = readInt32(); break;
-                    case 0x12: value = readInt64(); break;
-                    default: throw new Error('Unsupported BSON type: 0x' + type.toString(16));
-                }
-                obj[key] = value;
-                isArray.push(key);
-            }
-            
-            offset = startOffset + size;
-            
-            // Check if it's an array
-            if (arrayMode && isArray.every((k, i) => k === String(i))) {
-                return isArray.map(k => obj[k]);
-            }
-            return obj;
-        }
-        
-        return readDocument();
-    }
+  function renderBsonStats(jsonData) {
+    const jsonStr = stringifyJson(jsonData);
+    const jsonSize = new TextEncoder().encode(jsonStr).length;
+    const bsonSize = currentBsonData.length;
+    const diff = jsonSize - bsonSize;
+    const diffPercent = ((diff / jsonSize) * 100).toFixed(1);
 
-    function formatHexDump(data) {
-        const lines = [];
-        const bytesPerLine = 16;
-        
-        for (let i = 0; i < data.length; i += bytesPerLine) {
-            const offset = i.toString(16).padStart(8, '0');
-            const chunk = data.slice(i, i + bytesPerLine);
-            
-            const hex = Array.from(chunk).map(b => b.toString(16).padStart(2, '0')).join(' ');
-            const hexPadded = hex.padEnd(bytesPerLine * 3 - 1, ' ');
-            
-            const ascii = Array.from(chunk).map(b => 
-                b >= 32 && b <= 126 ? String.fromCharCode(b) : '.'
-            ).join('');
-            
-            lines.push(
-                `<span class="offset">${offset}</span>  ` +
-                `<span class="hex-byte">${hexPadded}</span>` +
-                `<span class="ascii">${escapeHtml(ascii)}</span>`
-            );
-        }
-        
-        return lines.join('\n');
-    }
+    const maxSize = Math.max(jsonSize, bsonSize);
+    const jsonWidth = ((jsonSize / maxSize) * 100).toFixed(0);
+    const bsonWidth = ((bsonSize / maxSize) * 100).toFixed(0);
 
-    function renderBsonStats(jsonData) {
-        const jsonStr = JSON.stringify(jsonData);
-        const jsonSize = new TextEncoder().encode(jsonStr).length;
-        const bsonSize = currentBsonData.length;
-        const diff = jsonSize - bsonSize;
-        const diffPercent = ((diff / jsonSize) * 100).toFixed(1);
-        
-        const maxSize = Math.max(jsonSize, bsonSize);
-        const jsonWidth = (jsonSize / maxSize * 100).toFixed(0);
-        const bsonWidth = (bsonSize / maxSize * 100).toFixed(0);
-        
-        let html = '<div class="size-comparison">';
-        
-        // JSON bar
-        html += `
+    let html = '<div class="size-comparison">';
+
+    // JSON bar
+    html += `
             <div class="size-bar-container">
                 <div class="size-bar-label">
                     <span class="label">JSON</span>
@@ -2357,9 +1470,9 @@
                     <div class="size-bar-fill json" style="width: ${jsonWidth}%"></div>
                 </div>
             </div>`;
-        
-        // BSON bar
-        html += `
+
+    // BSON bar
+    html += `
             <div class="size-bar-container">
                 <div class="size-bar-label">
                     <span class="label">BSON</span>
@@ -2369,474 +1482,176 @@
                     <div class="size-bar-fill bson" style="width: ${bsonWidth}%"></div>
                 </div>
             </div>`;
-        
-        // Difference
-        const isSmaller = diff > 0;
-        html += `
+
+    // Difference
+    const isSmaller = diff > 0;
+    html += `
             <div class="size-diff">
-                <div class="diff-value ${isSmaller ? 'positive' : 'negative'}">
-                    ${isSmaller ? '-' : '+'}${formatBytes(Math.abs(diff))} (${Math.abs(diffPercent)}%)
+                <div class="diff-value ${isSmaller ? "positive" : "negative"}">
+                    ${isSmaller ? "-" : "+"}${formatBytes(Math.abs(diff))} (${Math.abs(diffPercent)}%)
                 </div>
-                <div class="diff-label">${isSmaller ? 'BSON smaller' : 'BSON larger'}</div>
+                <div class="diff-label">${isSmaller ? "BSON smaller" : "BSON larger"}</div>
             </div>`;
-        
-        html += '</div>';
-        
-        // Additional info
-        html += `
+
+    html += "</div>";
+
+    // Additional info
+    html += `
             <div class="detail-section">
                 <div class="detail-label">Format Details</div>
                 <div class="detail-value" style="font-size: 10px;">
                     BSON includes type info for each value, making it self-describing but sometimes larger for simple data.
                 </div>
             </div>`;
-        
-        elements.bsonInfoContent.innerHTML = html;
+
+    elements.bsonInfoContent.innerHTML = html;
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  function copyBsonHex() {
+    if (!currentBsonData) {
+      showToast("No BSON data to copy", "error");
+      return;
     }
 
-    function formatBytes(bytes) {
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-        return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    const hex = Array.from(currentBsonData)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    navigator.clipboard
+      .writeText(hex)
+      .then(() => {
+        showToast("Hex copied to clipboard", "success");
+      })
+      .catch(() => {
+        showToast("Failed to copy", "error");
+      });
+  }
+
+  function downloadBson() {
+    if (!currentBsonData) {
+      showToast("No BSON data to download", "error");
+      return;
     }
 
-    function copyBsonHex() {
-        if (!currentBsonData) {
-            showToast('No BSON data to copy', 'error');
-            return;
-        }
-        
-        const hex = Array.from(currentBsonData).map(b => b.toString(16).padStart(2, '0')).join('');
-        navigator.clipboard.writeText(hex).then(() => {
-            showToast('Hex copied to clipboard', 'success');
-        }).catch(() => {
-            showToast('Failed to copy', 'error');
-        });
+    const blob = new Blob([currentBsonData], { type: "application/bson" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "data.bson";
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("BSON downloaded", "success");
+  }
+
+  function uploadBson(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+      try {
+        const buffer = e.target.result;
+        const decoded = await task("decode", { format: "bson", bytes: buffer });
+
+        // Update the JSON editor
+        elements.editor.value = decoded;
+        handleEditorInput();
+
+        showToast("BSON loaded successfully", "success");
+      } catch (err) {
+        showToast("Failed to parse BSON: " + err.message, "error");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+
+    // Reset input
+    event.target.value = "";
+  }
+
+  // ============ MsgPack Converter ============
+  let currentMsgpackData = null;
+
+  function initMsgpack() {
+    elements.copyMsgpackBtn.addEventListener("click", copyMsgpackHex);
+    elements.downloadMsgpackBtn.addEventListener("click", downloadMsgpack);
+    elements.uploadMsgpackInput.addEventListener("change", uploadMsgpack);
+  }
+
+  async function renderMsgpack(data) {
+    const text = elements.editor.value;
+    if (data === undefined) {
+      showMsgpackEmpty();
+      return;
     }
 
-    function downloadBson() {
-        if (!currentBsonData) {
-            showToast('No BSON data to download', 'error');
-            return;
-        }
-        
-        const blob = new Blob([currentBsonData], { type: 'application/bson' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'data.bson';
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('BSON downloaded', 'success');
+    try {
+      const bytes = await task("encode", { format: "msgpack", text });
+      if (text !== elements.editor.value) return;
+      currentMsgpackData = bytes;
+      const hexOutput = formatHexDump(currentMsgpackData.subarray(0, 4096));
+      elements.msgpackContent.innerHTML =
+        `<pre class="bson-hex">${hexOutput}</pre>` +
+        (bytes.length > 4096
+          ? "<p>Preview: first 4096 bytes. Copy or Save exports the full file.</p>"
+          : "");
+
+      renderMsgpackStats(data);
+    } catch (e) {
+      if (text === elements.editor.value) showMsgpackError(e.message);
     }
+  }
 
-    function uploadBson(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                const buffer = e.target.result;
-                const decoded = decodeBson(buffer);
-                
-                // Update the JSON editor
-                elements.editor.value = JSON.stringify(decoded, null, 2);
-                handleEditorInput();
-
-                showToast('BSON loaded successfully', 'success');
-            } catch (err) {
-                showToast('Failed to parse BSON: ' + err.message, 'error');
-            }
-        };
-        reader.readAsArrayBuffer(file);
-        
-        // Reset input
-        event.target.value = '';
-    }
-
-    // ============ MsgPack Converter ============
-    let currentMsgpackData = null;
-
-    function initMsgpack() {
-        elements.copyMsgpackBtn.addEventListener('click', copyMsgpackHex);
-        elements.downloadMsgpackBtn.addEventListener('click', downloadMsgpack);
-        elements.uploadMsgpackInput.addEventListener('change', uploadMsgpack);
-    }
-
-    function renderMsgpack(data) {
-        if (data === null || data === undefined) {
-            showMsgpackEmpty();
-            return;
-        }
-
-        try {
-            currentMsgpackData = encodeMsgpack(data);
-            const hexOutput = formatHexDump(currentMsgpackData);
-            elements.msgpackContent.innerHTML = `<pre class="bson-hex">${hexOutput}</pre>`;
-            
-            renderMsgpackStats(data);
-        } catch (e) {
-            showMsgpackError('MsgPack encoding error: ' + e.message);
-        }
-    }
-
-    function showMsgpackError(error) {
-        elements.msgpackContent.innerHTML = `
+  function showMsgpackError(error) {
+    elements.msgpackContent.innerHTML = `
             <div class="empty-state error-state">
                 <span class="material-icons">error_outline</span>
                 <p>Invalid JSON</p>
                 <p class="error-message">${escapeHtml(error)}</p>
             </div>`;
-        elements.msgpackInfoContent.innerHTML = `
+    elements.msgpackInfoContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">block</span>
                 <p>Fix JSON errors to generate MsgPack</p>
             </div>`;
-        currentMsgpackData = null;
-    }
+    currentMsgpackData = null;
+  }
 
-    function showMsgpackEmpty() {
-        elements.msgpackContent.innerHTML = `
+  function showMsgpackEmpty() {
+    elements.msgpackContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">info_outline</span>
                 <p>Enter valid JSON in the editor to generate MsgPack</p>
             </div>`;
-        elements.msgpackInfoContent.innerHTML = `
+    elements.msgpackInfoContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">compare_arrows</span>
                 <p>Size statistics will appear here</p>
             </div>`;
-        currentMsgpackData = null;
-    }
+    currentMsgpackData = null;
+  }
 
-    // Lightweight MsgPack encoder
-    function encodeMsgpack(value) {
-        const parts = [];
-        
-        function encode(val) {
-            const type = getType(val);
-            
-            switch (type) {
-                case 'null':
-                    return new Uint8Array([0xc0]);
-                
-                case 'boolean':
-                    return new Uint8Array([val ? 0xc3 : 0xc2]);
-                
-                case 'number':
-                    if (Number.isInteger(val)) {
-                        if (val >= 0 && val <= 127) {
-                            // positive fixint
-                            return new Uint8Array([val]);
-                        } else if (val >= -32 && val < 0) {
-                            // negative fixint
-                            return new Uint8Array([val & 0xff]);
-                        } else if (val >= 0 && val <= 0xff) {
-                            // uint8
-                            return new Uint8Array([0xcc, val]);
-                        } else if (val >= 0 && val <= 0xffff) {
-                            // uint16
-                            return new Uint8Array([0xcd, (val >> 8) & 0xff, val & 0xff]);
-                        } else if (val >= 0 && val <= 0xffffffff) {
-                            // uint32
-                            return new Uint8Array([0xce, (val >> 24) & 0xff, (val >> 16) & 0xff, (val >> 8) & 0xff, val & 0xff]);
-                        } else if (val >= -128 && val < 0) {
-                            // int8
-                            return new Uint8Array([0xd0, val & 0xff]);
-                        } else if (val >= -32768 && val < 0) {
-                            // int16
-                            const buf = new Uint8Array(3);
-                            buf[0] = 0xd1;
-                            buf[1] = (val >> 8) & 0xff;
-                            buf[2] = val & 0xff;
-                            return buf;
-                        } else if (val >= -2147483648 && val < 0) {
-                            // int32
-                            const buf = new Uint8Array(5);
-                            buf[0] = 0xd2;
-                            buf[1] = (val >> 24) & 0xff;
-                            buf[2] = (val >> 16) & 0xff;
-                            buf[3] = (val >> 8) & 0xff;
-                            buf[4] = val & 0xff;
-                            return buf;
-                        } else {
-                            // float64 for large integers
-                            const buf = new Uint8Array(9);
-                            buf[0] = 0xcb;
-                            const view = new DataView(buf.buffer);
-                            view.setFloat64(1, val, false);
-                            return buf;
-                        }
-                    } else {
-                        // float64
-                        const buf = new Uint8Array(9);
-                        buf[0] = 0xcb;
-                        const view = new DataView(buf.buffer);
-                        view.setFloat64(1, val, false);
-                        return buf;
-                    }
-                
-                case 'string':
-                    const encoder = new TextEncoder();
-                    const strBytes = encoder.encode(val);
-                    const len = strBytes.length;
-                    
-                    if (len <= 31) {
-                        // fixstr
-                        const buf = new Uint8Array(1 + len);
-                        buf[0] = 0xa0 | len;
-                        buf.set(strBytes, 1);
-                        return buf;
-                    } else if (len <= 0xff) {
-                        // str8
-                        const buf = new Uint8Array(2 + len);
-                        buf[0] = 0xd9;
-                        buf[1] = len;
-                        buf.set(strBytes, 2);
-                        return buf;
-                    } else if (len <= 0xffff) {
-                        // str16
-                        const buf = new Uint8Array(3 + len);
-                        buf[0] = 0xda;
-                        buf[1] = (len >> 8) & 0xff;
-                        buf[2] = len & 0xff;
-                        buf.set(strBytes, 3);
-                        return buf;
-                    } else {
-                        // str32
-                        const buf = new Uint8Array(5 + len);
-                        buf[0] = 0xdb;
-                        buf[1] = (len >> 24) & 0xff;
-                        buf[2] = (len >> 16) & 0xff;
-                        buf[3] = (len >> 8) & 0xff;
-                        buf[4] = len & 0xff;
-                        buf.set(strBytes, 5);
-                        return buf;
-                    }
-                
-                case 'array':
-                    const arrLen = val.length;
-                    let arrHeader;
-                    
-                    if (arrLen <= 15) {
-                        arrHeader = new Uint8Array([0x90 | arrLen]);
-                    } else if (arrLen <= 0xffff) {
-                        arrHeader = new Uint8Array([0xdc, (arrLen >> 8) & 0xff, arrLen & 0xff]);
-                    } else {
-                        arrHeader = new Uint8Array([0xdd, (arrLen >> 24) & 0xff, (arrLen >> 16) & 0xff, (arrLen >> 8) & 0xff, arrLen & 0xff]);
-                    }
-                    
-                    const arrParts = [arrHeader];
-                    for (const item of val) {
-                        arrParts.push(encode(item));
-                    }
-                    return concatArraysMsgpack(arrParts);
-                
-                case 'object':
-                    const keys = Object.keys(val);
-                    const mapLen = keys.length;
-                    let mapHeader;
-                    
-                    if (mapLen <= 15) {
-                        mapHeader = new Uint8Array([0x80 | mapLen]);
-                    } else if (mapLen <= 0xffff) {
-                        mapHeader = new Uint8Array([0xde, (mapLen >> 8) & 0xff, mapLen & 0xff]);
-                    } else {
-                        mapHeader = new Uint8Array([0xdf, (mapLen >> 24) & 0xff, (mapLen >> 16) & 0xff, (mapLen >> 8) & 0xff, mapLen & 0xff]);
-                    }
-                    
-                    const mapParts = [mapHeader];
-                    for (const key of keys) {
-                        mapParts.push(encode(key));
-                        mapParts.push(encode(val[key]));
-                    }
-                    return concatArraysMsgpack(mapParts);
-                
-                default:
-                    return new Uint8Array(0);
-            }
-        }
-        
-        return encode(value);
-    }
-    
-    function concatArraysMsgpack(arrays) {
-        const totalLen = arrays.reduce((sum, arr) => sum + arr.length, 0);
-        const result = new Uint8Array(totalLen);
-        let offset = 0;
-        for (const arr of arrays) {
-            result.set(arr, offset);
-            offset += arr.length;
-        }
-        return result;
-    }
+  // Lightweight MsgPack encoder
 
-    // MsgPack decoder
-    function decodeMsgpack(buffer) {
-        let offset = 0;
-        const view = new DataView(buffer);
-        const bytes = new Uint8Array(buffer);
-        
-        function decode() {
-            const byte = bytes[offset++];
-            
-            // positive fixint
-            if (byte <= 0x7f) return byte;
-            
-            // fixmap
-            if ((byte & 0xf0) === 0x80) {
-                const len = byte & 0x0f;
-                const obj = {};
-                for (let i = 0; i < len; i++) {
-                    const key = decode();
-                    obj[key] = decode();
-                }
-                return obj;
-            }
-            
-            // fixarray
-            if ((byte & 0xf0) === 0x90) {
-                const len = byte & 0x0f;
-                const arr = [];
-                for (let i = 0; i < len; i++) {
-                    arr.push(decode());
-                }
-                return arr;
-            }
-            
-            // fixstr
-            if ((byte & 0xe0) === 0xa0) {
-                const len = byte & 0x1f;
-                const str = new TextDecoder().decode(bytes.slice(offset, offset + len));
-                offset += len;
-                return str;
-            }
-            
-            // negative fixint
-            if ((byte & 0xe0) === 0xe0) {
-                return byte - 256;
-            }
-            
-            switch (byte) {
-                case 0xc0: return null;
-                case 0xc2: return false;
-                case 0xc3: return true;
-                
-                case 0xcc: return bytes[offset++]; // uint8
-                case 0xcd: { // uint16
-                    const val = view.getUint16(offset, false);
-                    offset += 2;
-                    return val;
-                }
-                case 0xce: { // uint32
-                    const val = view.getUint32(offset, false);
-                    offset += 4;
-                    return val;
-                }
-                
-                case 0xd0: { // int8
-                    const val = view.getInt8(offset);
-                    offset += 1;
-                    return val;
-                }
-                case 0xd1: { // int16
-                    const val = view.getInt16(offset, false);
-                    offset += 2;
-                    return val;
-                }
-                case 0xd2: { // int32
-                    const val = view.getInt32(offset, false);
-                    offset += 4;
-                    return val;
-                }
-                
-                case 0xcb: { // float64
-                    const val = view.getFloat64(offset, false);
-                    offset += 8;
-                    return val;
-                }
-                
-                case 0xd9: { // str8
-                    const len = bytes[offset++];
-                    const str = new TextDecoder().decode(bytes.slice(offset, offset + len));
-                    offset += len;
-                    return str;
-                }
-                case 0xda: { // str16
-                    const len = view.getUint16(offset, false);
-                    offset += 2;
-                    const str = new TextDecoder().decode(bytes.slice(offset, offset + len));
-                    offset += len;
-                    return str;
-                }
-                case 0xdb: { // str32
-                    const len = view.getUint32(offset, false);
-                    offset += 4;
-                    const str = new TextDecoder().decode(bytes.slice(offset, offset + len));
-                    offset += len;
-                    return str;
-                }
-                
-                case 0xdc: { // array16
-                    const len = view.getUint16(offset, false);
-                    offset += 2;
-                    const arr = [];
-                    for (let i = 0; i < len; i++) arr.push(decode());
-                    return arr;
-                }
-                case 0xdd: { // array32
-                    const len = view.getUint32(offset, false);
-                    offset += 4;
-                    const arr = [];
-                    for (let i = 0; i < len; i++) arr.push(decode());
-                    return arr;
-                }
-                
-                case 0xde: { // map16
-                    const len = view.getUint16(offset, false);
-                    offset += 2;
-                    const obj = {};
-                    for (let i = 0; i < len; i++) {
-                        const key = decode();
-                        obj[key] = decode();
-                    }
-                    return obj;
-                }
-                case 0xdf: { // map32
-                    const len = view.getUint32(offset, false);
-                    offset += 4;
-                    const obj = {};
-                    for (let i = 0; i < len; i++) {
-                        const key = decode();
-                        obj[key] = decode();
-                    }
-                    return obj;
-                }
-                
-                default:
-                    throw new Error('Unsupported MsgPack type: 0x' + byte.toString(16));
-            }
-        }
-        
-        return decode();
-    }
+  function renderMsgpackStats(jsonData) {
+    const jsonStr = stringifyJson(jsonData);
+    const jsonSize = new TextEncoder().encode(jsonStr).length;
+    const msgpackSize = currentMsgpackData.length;
+    const diff = jsonSize - msgpackSize;
+    const diffPercent = ((diff / jsonSize) * 100).toFixed(1);
 
-    function renderMsgpackStats(jsonData) {
-        const jsonStr = JSON.stringify(jsonData);
-        const jsonSize = new TextEncoder().encode(jsonStr).length;
-        const msgpackSize = currentMsgpackData.length;
-        const diff = jsonSize - msgpackSize;
-        const diffPercent = ((diff / jsonSize) * 100).toFixed(1);
-        
-        const maxSize = Math.max(jsonSize, msgpackSize);
-        const jsonWidth = (jsonSize / maxSize * 100).toFixed(0);
-        const msgpackWidth = (msgpackSize / maxSize * 100).toFixed(0);
-        
-        let html = '<div class="size-comparison">';
-        
-        // JSON bar
-        html += `
+    const maxSize = Math.max(jsonSize, msgpackSize);
+    const jsonWidth = ((jsonSize / maxSize) * 100).toFixed(0);
+    const msgpackWidth = ((msgpackSize / maxSize) * 100).toFixed(0);
+
+    let html = '<div class="size-comparison">';
+
+    // JSON bar
+    html += `
             <div class="size-bar-container">
                 <div class="size-bar-label">
                     <span class="label">JSON</span>
@@ -2846,9 +1661,9 @@
                     <div class="size-bar-fill json" style="width: ${jsonWidth}%"></div>
                 </div>
             </div>`;
-        
-        // MsgPack bar
-        html += `
+
+    // MsgPack bar
+    html += `
             <div class="size-bar-container">
                 <div class="size-bar-label">
                     <span class="label">MsgPack</span>
@@ -2858,379 +1673,175 @@
                     <div class="size-bar-fill bson" style="width: ${msgpackWidth}%"></div>
                 </div>
             </div>`;
-        
-        // Difference
-        const isSmaller = diff > 0;
-        html += `
+
+    // Difference
+    const isSmaller = diff > 0;
+    html += `
             <div class="size-diff">
-                <div class="diff-value ${isSmaller ? 'positive' : 'negative'}">
-                    ${isSmaller ? '-' : '+'}${formatBytes(Math.abs(diff))} (${Math.abs(diffPercent)}%)
+                <div class="diff-value ${isSmaller ? "positive" : "negative"}">
+                    ${isSmaller ? "-" : "+"}${formatBytes(Math.abs(diff))} (${Math.abs(diffPercent)}%)
                 </div>
-                <div class="diff-label">${isSmaller ? 'MsgPack smaller' : 'MsgPack larger'}</div>
+                <div class="diff-label">${isSmaller ? "MsgPack smaller" : "MsgPack larger"}</div>
             </div>`;
-        
-        html += '</div>';
-        
-        // Additional info
-        html += `
+
+    html += "</div>";
+
+    // Additional info
+    html += `
             <div class="detail-section">
                 <div class="detail-label">Format Details</div>
                 <div class="detail-value" style="font-size: 10px;">
                     MsgPack is highly optimized for size. Small integers use 1 byte, short strings have minimal overhead.
                 </div>
             </div>`;
-        
-        elements.msgpackInfoContent.innerHTML = html;
+
+    elements.msgpackInfoContent.innerHTML = html;
+  }
+
+  function copyMsgpackHex() {
+    if (!currentMsgpackData) {
+      showToast("No MsgPack data to copy", "error");
+      return;
     }
 
-    function copyMsgpackHex() {
-        if (!currentMsgpackData) {
-            showToast('No MsgPack data to copy', 'error');
-            return;
-        }
-        
-        const hex = Array.from(currentMsgpackData).map(b => b.toString(16).padStart(2, '0')).join('');
-        navigator.clipboard.writeText(hex).then(() => {
-            showToast('Hex copied to clipboard', 'success');
-        }).catch(() => {
-            showToast('Failed to copy', 'error');
+    const hex = Array.from(currentMsgpackData)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    navigator.clipboard
+      .writeText(hex)
+      .then(() => {
+        showToast("Hex copied to clipboard", "success");
+      })
+      .catch(() => {
+        showToast("Failed to copy", "error");
+      });
+  }
+
+  function downloadMsgpack() {
+    if (!currentMsgpackData) {
+      showToast("No MsgPack data to download", "error");
+      return;
+    }
+
+    const blob = new Blob([currentMsgpackData], {
+      type: "application/msgpack",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "data.msgpack";
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("MsgPack downloaded", "success");
+  }
+
+  function uploadMsgpack(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+      try {
+        const buffer = e.target.result;
+        const decoded = await task("decode", {
+          format: "msgpack",
+          bytes: buffer,
         });
+
+        // Update the JSON editor
+        elements.editor.value = decoded;
+        handleEditorInput();
+
+        showToast("MsgPack loaded successfully", "success");
+      } catch (err) {
+        showToast("Failed to parse MsgPack: " + err.message, "error");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+
+    // Reset input
+    event.target.value = "";
+  }
+
+  // ============ CBOR Converter ============
+  let currentCborData = null;
+
+  function initCbor() {
+    elements.copyCborBtn.addEventListener("click", copyCborHex);
+    elements.downloadCborBtn.addEventListener("click", downloadCbor);
+    elements.uploadCborInput.addEventListener("change", uploadCbor);
+  }
+
+  async function renderCbor(data) {
+    const text = elements.editor.value;
+    if (data === undefined) {
+      showCborEmpty();
+      return;
     }
 
-    function downloadMsgpack() {
-        if (!currentMsgpackData) {
-            showToast('No MsgPack data to download', 'error');
-            return;
-        }
-        
-        const blob = new Blob([currentMsgpackData], { type: 'application/msgpack' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'data.msgpack';
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('MsgPack downloaded', 'success');
+    try {
+      const bytes = await task("encode", { format: "cbor", text });
+      if (text !== elements.editor.value) return;
+      currentCborData = bytes;
+      const hexOutput = formatHexDump(currentCborData.subarray(0, 4096));
+      elements.cborContent.innerHTML =
+        `<pre class="bson-hex">${hexOutput}</pre>` +
+        (bytes.length > 4096
+          ? "<p>Preview: first 4096 bytes. Copy or Save exports the full file.</p>"
+          : "");
+
+      renderCborStats(data);
+    } catch (e) {
+      if (text === elements.editor.value) showCborError(e.message);
     }
+  }
 
-    function uploadMsgpack(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                const buffer = e.target.result;
-                const decoded = decodeMsgpack(buffer);
-                
-                // Update the JSON editor
-                elements.editor.value = JSON.stringify(decoded, null, 2);
-                handleEditorInput();
-
-                showToast('MsgPack loaded successfully', 'success');
-            } catch (err) {
-                showToast('Failed to parse MsgPack: ' + err.message, 'error');
-            }
-        };
-        reader.readAsArrayBuffer(file);
-        
-        // Reset input
-        event.target.value = '';
-    }
-
-    // ============ CBOR Converter ============
-    let currentCborData = null;
-
-    function initCbor() {
-        elements.copyCborBtn.addEventListener('click', copyCborHex);
-        elements.downloadCborBtn.addEventListener('click', downloadCbor);
-        elements.uploadCborInput.addEventListener('change', uploadCbor);
-    }
-
-    function renderCbor(data) {
-        if (data === null || data === undefined) {
-            showCborEmpty();
-            return;
-        }
-
-        try {
-            currentCborData = encodeCbor(data);
-            const hexOutput = formatHexDump(currentCborData);
-            elements.cborContent.innerHTML = `<pre class="bson-hex">${hexOutput}</pre>`;
-            
-            renderCborStats(data);
-        } catch (e) {
-            showCborError('CBOR encoding error: ' + e.message);
-        }
-    }
-
-    function showCborError(error) {
-        elements.cborContent.innerHTML = `
+  function showCborError(error) {
+    elements.cborContent.innerHTML = `
             <div class="empty-state error-state">
                 <span class="material-icons">error_outline</span>
                 <p>Invalid JSON</p>
                 <p class="error-message">${escapeHtml(error)}</p>
             </div>`;
-        elements.cborInfoContent.innerHTML = `
+    elements.cborInfoContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">block</span>
                 <p>Fix JSON errors to generate CBOR</p>
             </div>`;
-        currentCborData = null;
-    }
+    currentCborData = null;
+  }
 
-    function showCborEmpty() {
-        elements.cborContent.innerHTML = `
+  function showCborEmpty() {
+    elements.cborContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">info_outline</span>
                 <p>Enter valid JSON in the editor to generate CBOR</p>
             </div>`;
-        elements.cborInfoContent.innerHTML = `
+    elements.cborInfoContent.innerHTML = `
             <div class="empty-state">
                 <span class="material-icons">compare_arrows</span>
                 <p>Size statistics will appear here</p>
             </div>`;
-        currentCborData = null;
-    }
+    currentCborData = null;
+  }
 
-    // CBOR Encoder (RFC 8949)
-    function encodeCbor(value) {
-        function encode(val) {
-            const type = getType(val);
-            
-            switch (type) {
-                case 'null':
-                    return new Uint8Array([0xf6]); // simple value null
-                
-                case 'boolean':
-                    return new Uint8Array([val ? 0xf5 : 0xf4]); // true: 0xf5, false: 0xf4
-                
-                case 'number':
-                    if (Number.isInteger(val)) {
-                        if (val >= 0) {
-                            return encodeUnsigned(0, val); // major type 0
-                        } else {
-                            return encodeUnsigned(1, -1 - val); // major type 1 (negative)
-                        }
-                    } else {
-                        // Float64
-                        const buf = new ArrayBuffer(9);
-                        const view = new DataView(buf);
-                        view.setUint8(0, 0xfb); // float64 marker
-                        view.setFloat64(1, val, false); // big-endian
-                        return new Uint8Array(buf);
-                    }
-                
-                case 'string':
-                    const strBytes = new TextEncoder().encode(val);
-                    const strHeader = encodeUnsigned(3, strBytes.length); // major type 3
-                    const strResult = new Uint8Array(strHeader.length + strBytes.length);
-                    strResult.set(strHeader);
-                    strResult.set(strBytes, strHeader.length);
-                    return strResult;
-                
-                case 'array':
-                    const arrHeader = encodeUnsigned(4, val.length); // major type 4
-                    const arrParts = [arrHeader];
-                    for (const item of val) {
-                        arrParts.push(encode(item));
-                    }
-                    return concatArrays(arrParts);
-                
-                case 'object':
-                    const keys = Object.keys(val);
-                    const mapHeader = encodeUnsigned(5, keys.length); // major type 5
-                    const mapParts = [mapHeader];
-                    for (const key of keys) {
-                        mapParts.push(encode(key)); // key as string
-                        mapParts.push(encode(val[key])); // value
-                    }
-                    return concatArrays(mapParts);
-                
-                default:
-                    throw new Error('Unsupported type: ' + type);
-            }
-        }
-        
-        function encodeUnsigned(majorType, value) {
-            const mt = majorType << 5;
-            if (value < 24) {
-                return new Uint8Array([mt | value]);
-            } else if (value < 0x100) {
-                return new Uint8Array([mt | 24, value]);
-            } else if (value < 0x10000) {
-                return new Uint8Array([mt | 25, (value >> 8) & 0xff, value & 0xff]);
-            } else if (value < 0x100000000) {
-                return new Uint8Array([mt | 26, (value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff]);
-            } else {
-                // 64-bit
-                const buf = new Uint8Array(9);
-                buf[0] = mt | 27;
-                const high = Math.floor(value / 0x100000000);
-                const low = value >>> 0;
-                buf[1] = (high >> 24) & 0xff;
-                buf[2] = (high >> 16) & 0xff;
-                buf[3] = (high >> 8) & 0xff;
-                buf[4] = high & 0xff;
-                buf[5] = (low >> 24) & 0xff;
-                buf[6] = (low >> 16) & 0xff;
-                buf[7] = (low >> 8) & 0xff;
-                buf[8] = low & 0xff;
-                return buf;
-            }
-        }
-        
-        function concatArrays(arrays) {
-            const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
-            const result = new Uint8Array(totalLength);
-            let offset = 0;
-            for (const arr of arrays) {
-                result.set(arr, offset);
-                offset += arr.length;
-            }
-            return result;
-        }
-        
-        return encode(value);
-    }
+  // CBOR Encoder (RFC 8949)
 
-    // CBOR Decoder
-    function decodeCbor(buffer) {
-        const data = new Uint8Array(buffer);
-        let offset = 0;
-        
-        function decode() {
-            if (offset >= data.length) throw new Error('Unexpected end of CBOR data');
-            
-            const initial = data[offset++];
-            const majorType = initial >> 5;
-            const additionalInfo = initial & 0x1f;
-            
-            let value = readLength(additionalInfo);
-            
-            switch (majorType) {
-                case 0: // unsigned integer
-                    return value;
-                
-                case 1: // negative integer
-                    return -1 - value;
-                
-                case 2: // byte string
-                    const bytes = data.slice(offset, offset + value);
-                    offset += value;
-                    return Array.from(bytes); // Return as array of numbers
-                
-                case 3: // text string
-                    const strBytes = data.slice(offset, offset + value);
-                    offset += value;
-                    return new TextDecoder().decode(strBytes);
-                
-                case 4: // array
-                    const arr = [];
-                    for (let i = 0; i < value; i++) {
-                        arr.push(decode());
-                    }
-                    return arr;
-                
-                case 5: // map
-                    const obj = {};
-                    for (let i = 0; i < value; i++) {
-                        const key = decode();
-                        obj[key] = decode();
-                    }
-                    return obj;
-                
-                case 6: // tagged item (ignore tag, return value)
-                    return decode();
-                
-                case 7: // simple/float
-                    if (additionalInfo === 20) return false;
-                    if (additionalInfo === 21) return true;
-                    if (additionalInfo === 22) return null;
-                    if (additionalInfo === 23) return undefined;
-                    if (additionalInfo === 25) {
-                        // float16 - simplified handling
-                        offset -= 1;
-                        const f16 = (data[offset] << 8) | data[offset + 1];
-                        offset += 2;
-                        return decodeFloat16(f16);
-                    }
-                    if (additionalInfo === 26) {
-                        // float32
-                        offset -= 4;
-                        const view = new DataView(data.buffer, offset, 4);
-                        offset += 4;
-                        return view.getFloat32(0, false);
-                    }
-                    if (additionalInfo === 27) {
-                        // float64
-                        const view = new DataView(data.buffer, offset - 8, 8);
-                        return view.getFloat64(0, false);
-                    }
-                    return null;
-                
-                default:
-                    throw new Error('Unknown CBOR major type: ' + majorType);
-            }
-        }
-        
-        function readLength(info) {
-            if (info < 24) return info;
-            if (info === 24) return data[offset++];
-            if (info === 25) {
-                const val = (data[offset] << 8) | data[offset + 1];
-                offset += 2;
-                return val;
-            }
-            if (info === 26) {
-                const val = (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3];
-                offset += 4;
-                return val >>> 0;
-            }
-            if (info === 27) {
-                const high = (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3];
-                const low = (data[offset + 4] << 24) | (data[offset + 5] << 16) | (data[offset + 6] << 8) | data[offset + 7];
-                offset += 8;
-                return (high >>> 0) * 0x100000000 + (low >>> 0);
-            }
-            throw new Error('Invalid CBOR additional info: ' + info);
-        }
-        
-        function decodeFloat16(value) {
-            const sign = (value >> 15) & 1;
-            const exp = (value >> 10) & 0x1f;
-            const mant = value & 0x3ff;
-            
-            let result;
-            if (exp === 0) {
-                result = mant * Math.pow(2, -24);
-            } else if (exp === 31) {
-                result = mant === 0 ? Infinity : NaN;
-            } else {
-                result = (mant + 1024) * Math.pow(2, exp - 25);
-            }
-            
-            return sign ? -result : result;
-        }
-        
-        return decode();
-    }
+  function renderCborStats(jsonData) {
+    const jsonStr = stringifyJson(jsonData);
+    const jsonSize = new TextEncoder().encode(jsonStr).length;
+    const cborSize = currentCborData.length;
+    const diff = jsonSize - cborSize;
+    const diffPercent = ((diff / jsonSize) * 100).toFixed(1);
 
-    function renderCborStats(jsonData) {
-        const jsonStr = JSON.stringify(jsonData);
-        const jsonSize = new TextEncoder().encode(jsonStr).length;
-        const cborSize = currentCborData.length;
-        const diff = jsonSize - cborSize;
-        const diffPercent = ((diff / jsonSize) * 100).toFixed(1);
-        
-        const maxSize = Math.max(jsonSize, cborSize);
-        const jsonWidth = (jsonSize / maxSize * 100).toFixed(0);
-        const cborWidth = (cborSize / maxSize * 100).toFixed(0);
-        
-        let html = '<div class="size-comparison">';
-        
-        // JSON bar
-        html += `
+    const maxSize = Math.max(jsonSize, cborSize);
+    const jsonWidth = ((jsonSize / maxSize) * 100).toFixed(0);
+    const cborWidth = ((cborSize / maxSize) * 100).toFixed(0);
+
+    let html = '<div class="size-comparison">';
+
+    // JSON bar
+    html += `
             <div class="size-bar-container">
                 <div class="size-bar-label">
                     <span class="label">JSON</span>
@@ -3240,9 +1851,9 @@
                     <div class="size-bar-fill json" style="width: ${jsonWidth}%"></div>
                 </div>
             </div>`;
-        
-        // CBOR bar
-        html += `
+
+    // CBOR bar
+    html += `
             <div class="size-bar-container">
                 <div class="size-bar-label">
                     <span class="label">CBOR</span>
@@ -3252,1273 +1863,539 @@
                     <div class="size-bar-fill cbor" style="width: ${cborWidth}%"></div>
                 </div>
             </div>`;
-        
-        // Difference
-        html += `
+
+    // Difference
+    html += `
             <div class="size-diff">
-                <div class="diff-value ${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '-' : '+'}${formatBytes(Math.abs(diff))} (${Math.abs(diffPercent)}%)</div>
-                <div class="diff-label">${diff >= 0 ? 'Smaller' : 'Larger'} than JSON</div>
+                <div class="diff-value ${diff >= 0 ? "positive" : "negative"}">${diff >= 0 ? "-" : "+"}${formatBytes(Math.abs(diff))} (${Math.abs(diffPercent)}%)</div>
+                <div class="diff-label">${diff >= 0 ? "Smaller" : "Larger"} than JSON</div>
             </div>`;
-        
-        html += '</div>';
-        
-        // Additional info
-        html += `
+
+    html += "</div>";
+
+    // Additional info
+    html += `
             <div class="detail-section">
                 <div class="detail-label">Format Details</div>
                 <div class="detail-value" style="font-size: 10px;">
                     CBOR (RFC 8949) is designed for small code size and small message size. Used in IoT, WebAuthn, and COSE.
                 </div>
             </div>`;
-        
-        elements.cborInfoContent.innerHTML = html;
+
+    elements.cborInfoContent.innerHTML = html;
+  }
+
+  function copyCborHex() {
+    if (!currentCborData) {
+      showToast("No CBOR data to copy", "error");
+      return;
     }
 
-    function copyCborHex() {
-        if (!currentCborData) {
-            showToast('No CBOR data to copy', 'error');
-            return;
-        }
-        
-        const hex = Array.from(currentCborData)
-            .map(b => b.toString(16).padStart(2, '0').toUpperCase())
-            .join(' ');
-        
-        navigator.clipboard.writeText(hex).then(() => {
-            showToast('CBOR hex copied to clipboard', 'success');
-        }).catch(() => {
-            showToast('Failed to copy', 'error');
-        });
+    const hex = Array.from(currentCborData)
+      .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
+      .join(" ");
+
+    navigator.clipboard
+      .writeText(hex)
+      .then(() => {
+        showToast("CBOR hex copied to clipboard", "success");
+      })
+      .catch(() => {
+        showToast("Failed to copy", "error");
+      });
+  }
+
+  function downloadCbor() {
+    if (!currentCborData) {
+      showToast("No CBOR data to download", "error");
+      return;
     }
 
-    function downloadCbor() {
-        if (!currentCborData) {
-            showToast('No CBOR data to download', 'error');
-            return;
-        }
-        
-        const blob = new Blob([currentCborData], { type: 'application/cbor' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'data.cbor';
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('CBOR downloaded', 'success');
+    const blob = new Blob([currentCborData], { type: "application/cbor" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "data.cbor";
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("CBOR downloaded", "success");
+  }
+
+  function uploadCbor(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+      try {
+        const buffer = e.target.result;
+        const decoded = await task("decode", { format: "cbor", bytes: buffer });
+
+        // Update the JSON editor
+        elements.editor.value = decoded;
+        handleEditorInput();
+
+        showToast("CBOR loaded successfully", "success");
+      } catch (err) {
+        showToast("Failed to parse CBOR: " + err.message, "error");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+
+    // Reset input
+    event.target.value = "";
+  }
+
+  // ============ JSON Compare (semantic diff) ============
+  function initCompare() {
+    elements.compareRunBtn.addEventListener("click", runCompare);
+    elements.compareSwapBtn.addEventListener("click", swapComparePanels);
+    elements.compareFromEditorA.addEventListener("click", () => {
+      lastCompareReportText = "";
+      elements.compareResultsContent.textContent =
+        "Run Compare to update the report";
+      elements.compareJsonA.value = elements.editor.value;
+      hideCompareParseError("a");
+      hideCompareParseError("b");
+    });
+    elements.compareFromEditorB.addEventListener("click", () => {
+      lastCompareReportText = "";
+      elements.compareResultsContent.textContent =
+        "Run Compare to update the report";
+      elements.compareJsonB.value = elements.editor.value;
+      hideCompareParseError("a");
+      hideCompareParseError("b");
+    });
+    elements.compareCopyReportBtn.addEventListener("click", copyCompareReport);
+    elements.uploadCompareA.addEventListener("change", (e) =>
+      uploadCompareFile(e, "a"),
+    );
+    elements.uploadCompareB.addEventListener("change", (e) =>
+      uploadCompareFile(e, "b"),
+    );
+
+    function onCompareInput(side) {
+      lastCompareReportText = "";
+      elements.compareResultsContent.textContent =
+        "Run Compare to update the report";
+      if (side === "a") {
+        compareErrorLineA = null;
+        elements.compareErrorA.hidden = true;
+        elements.compareErrorA.textContent = "";
+      } else {
+        compareErrorLineB = null;
+        elements.compareErrorB.hidden = true;
+        elements.compareErrorB.textContent = "";
+      }
+      refreshCompareEditor(side);
     }
+    elements.compareJsonA.addEventListener("input", () => onCompareInput("a"));
+    elements.compareJsonB.addEventListener("input", () => onCompareInput("b"));
 
-    function uploadCbor(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                const buffer = e.target.result;
-                const decoded = decodeCbor(buffer);
-                
-                // Update the JSON editor
-                elements.editor.value = JSON.stringify(decoded, null, 2);
-                handleEditorInput();
+    elements.compareScrollA.addEventListener("click", () =>
+      elements.compareJsonA.focus(),
+    );
+    elements.compareScrollB.addEventListener("click", () =>
+      elements.compareJsonB.focus(),
+    );
 
-                showToast('CBOR loaded successfully', 'success');
-            } catch (err) {
-                showToast('Failed to parse CBOR: ' + err.message, 'error');
-            }
-        };
-        reader.readAsArrayBuffer(file);
-        
-        // Reset input
-        event.target.value = '';
+    refreshCompareEditor("a");
+    refreshCompareEditor("b");
+  }
+
+  function hideCompareParseError(side) {
+    const el = side === "a" ? elements.compareErrorA : elements.compareErrorB;
+    el.hidden = true;
+    el.textContent = "";
+    if (side === "a") {
+      compareErrorLineA = null;
+    } else {
+      compareErrorLineB = null;
     }
+    refreshCompareEditor(side);
+  }
 
-    // ============ JSON Compare (semantic diff) ============
-    function initCompare() {
-        elements.compareRunBtn.addEventListener('click', runCompare);
-        elements.compareSwapBtn.addEventListener('click', swapComparePanels);
-        elements.compareFromEditorA.addEventListener('click', () => {
-            elements.compareJsonA.value = elements.editor.value;
-            hideCompareParseError('a');
-            hideCompareParseError('b');
-        });
-        elements.compareFromEditorB.addEventListener('click', () => {
-            elements.compareJsonB.value = elements.editor.value;
-            hideCompareParseError('a');
-            hideCompareParseError('b');
-        });
-        elements.compareCopyReportBtn.addEventListener('click', copyCompareReport);
-        elements.uploadCompareA.addEventListener('change', (e) => uploadCompareFile(e, 'a'));
-        elements.uploadCompareB.addEventListener('change', (e) => uploadCompareFile(e, 'b'));
+  function showCompareParseError(side, message) {
+    const el = side === "a" ? elements.compareErrorA : elements.compareErrorB;
+    el.hidden = false;
+    el.textContent = message;
+  }
 
-        function onCompareInput(side) {
-            if (side === 'a') {
-                compareErrorLineA = null;
-                elements.compareErrorA.hidden = true;
-                elements.compareErrorA.textContent = '';
-            } else {
-                compareErrorLineB = null;
-                elements.compareErrorB.hidden = true;
-                elements.compareErrorB.textContent = '';
-            }
-            refreshCompareEditor(side);
-            scrollToCaretCompare(side);
-        }
-        elements.compareJsonA.addEventListener('input', () => onCompareInput('a'));
-        elements.compareJsonB.addEventListener('input', () => onCompareInput('b'));
-        elements.compareJsonA.addEventListener('keydown', handleCompareKeyDown);
-        elements.compareJsonB.addEventListener('keydown', handleCompareKeyDown);
-        elements.compareJsonA.addEventListener('click', () => scrollToCaretCompare('a'));
-        elements.compareJsonA.addEventListener('keyup', () => scrollToCaretCompare('a'));
-        elements.compareJsonB.addEventListener('click', () => scrollToCaretCompare('b'));
-        elements.compareJsonB.addEventListener('keyup', () => scrollToCaretCompare('b'));
+  function swapComparePanels() {
+    lastCompareReportText = "";
+    elements.compareResultsContent.textContent =
+      "Run Compare to update the report";
+    const a = elements.compareJsonA.value;
+    elements.compareJsonA.value = elements.compareJsonB.value;
+    elements.compareJsonB.value = a;
+    const errA = elements.compareErrorA.textContent;
+    const errB = elements.compareErrorB.textContent;
+    const hiddenA = elements.compareErrorA.hidden;
+    const hiddenB = elements.compareErrorB.hidden;
+    elements.compareErrorA.textContent = errB;
+    elements.compareErrorB.textContent = errA;
+    elements.compareErrorA.hidden = hiddenB;
+    elements.compareErrorB.hidden = hiddenA;
+    const lineA = compareErrorLineA;
+    compareErrorLineA = compareErrorLineB;
+    compareErrorLineB = lineA;
+    refreshCompareEditor("a");
+    refreshCompareEditor("b");
+  }
 
-        elements.compareScrollA.addEventListener('scroll', () => syncCompareLineNumbers('a'), { passive: true });
-        elements.compareScrollB.addEventListener('scroll', () => syncCompareLineNumbers('b'), { passive: true });
-        elements.compareScrollA.addEventListener('click', () => elements.compareJsonA.focus());
-        elements.compareScrollB.addEventListener('click', () => elements.compareJsonB.focus());
-
-        refreshCompareEditor('a');
-        refreshCompareEditor('b');
+  function uploadCompareFile(event, side) {
+    lastCompareReportText = "";
+    elements.compareResultsContent.textContent =
+      "Run Compare to update the report";
+    const file = event.target.files[0];
+    if (!file) {
+      return;
     }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      if (side === "a") {
+        elements.compareJsonA.value = text;
+        hideCompareParseError("a");
+      } else {
+        elements.compareJsonB.value = text;
+        hideCompareParseError("b");
+      }
+      refreshCompareEditor(side);
+      showToast("File loaded into " + (side === "a" ? "A" : "B"), "success");
+    };
+    reader.onerror = () => showToast("Failed to read file", "error");
+    reader.readAsText(file);
+    event.target.value = "";
+  }
 
-    function handleCompareKeyDown(e) {
-        if (e.key !== 'Tab') {
-            return;
-        }
-        e.preventDefault();
-        const ta = e.target;
-        const side = ta === elements.compareJsonA ? 'a' : 'b';
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const value = ta.value;
-        ta.value = value.substring(0, start) + '  ' + value.substring(end);
-        ta.selectionStart = ta.selectionEnd = start + 2;
-        if (side === 'a') {
-            compareErrorLineA = null;
-            elements.compareErrorA.hidden = true;
-            elements.compareErrorA.textContent = '';
-        } else {
-            compareErrorLineB = null;
-            elements.compareErrorB.hidden = true;
-            elements.compareErrorB.textContent = '';
-        }
-        refreshCompareEditor(side);
+  function diffKindLabel(kind) {
+    switch (kind) {
+      case "value":
+        return "Value differs";
+      case "type":
+        return "Type mismatch";
+      case "length":
+        return "Array length differs";
+      case "only_left":
+        return "Only in JSON A";
+      case "only_right":
+        return "Only in JSON B";
+      default:
+        return kind;
     }
+  }
 
-    function hideCompareParseError(side) {
-        const el = side === 'a' ? elements.compareErrorA : elements.compareErrorB;
-        el.hidden = true;
-        el.textContent = '';
-        if (side === 'a') {
-            compareErrorLineA = null;
-        } else {
-            compareErrorLineB = null;
-        }
-        refreshCompareEditor(side);
-    }
-
-    function showCompareParseError(side, message) {
-        const el = side === 'a' ? elements.compareErrorA : elements.compareErrorB;
-        el.hidden = false;
-        el.textContent = message;
-    }
-
-    function swapComparePanels() {
-        const a = elements.compareJsonA.value;
-        elements.compareJsonA.value = elements.compareJsonB.value;
-        elements.compareJsonB.value = a;
-        const errA = elements.compareErrorA.textContent;
-        const errB = elements.compareErrorB.textContent;
-        const hiddenA = elements.compareErrorA.hidden;
-        const hiddenB = elements.compareErrorB.hidden;
-        elements.compareErrorA.textContent = errB;
-        elements.compareErrorB.textContent = errA;
-        elements.compareErrorA.hidden = hiddenB;
-        elements.compareErrorB.hidden = hiddenA;
-        const lineA = compareErrorLineA;
-        compareErrorLineA = compareErrorLineB;
-        compareErrorLineB = lineA;
-        refreshCompareEditor('a');
-        refreshCompareEditor('b');
-    }
-
-    function uploadCompareFile(event, side) {
-        const file = event.target.files[0];
-        if (!file) {
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const text = e.target.result;
-            if (side === 'a') {
-                elements.compareJsonA.value = text;
-                hideCompareParseError('a');
-            } else {
-                elements.compareJsonB.value = text;
-                hideCompareParseError('b');
-            }
-            refreshCompareEditor(side);
-            showToast('File loaded into ' + (side === 'a' ? 'A' : 'B'), 'success');
-        };
-        reader.onerror = () => showToast('Failed to read file', 'error');
-        reader.readAsText(file);
-        event.target.value = '';
-    }
-
-    function parseCompareJson(text, side) {
-        try {
-            const data = JSON.parse(text);
-            hideCompareParseError(side);
-            return { ok: true, data };
-        } catch (err) {
-            const msg = err.message || 'Invalid JSON';
-            showCompareParseError(side, msg);
-            const line = getErrorLine(msg, text);
-            if (side === 'a') {
-                compareErrorLineA = line;
-            } else {
-                compareErrorLineB = line;
-            }
-            refreshCompareEditor(side);
-            return { ok: false, data: null };
-        }
-    }
-
-    function jsonValueType(value) {
-        if (value === null) {
-            return 'null';
-        }
-        if (Array.isArray(value)) {
-            return 'array';
-        }
-        return typeof value;
-    }
-
-    function formatJsonPath(parts) {
-        if (!parts.length) {
-            return '$';
-        }
-        let s = '$';
-        for (let i = 0; i < parts.length; i++) {
-            const p = parts[i];
-            if (typeof p === 'number') {
-                s += '[' + p + ']';
-            } else if (/^[a-zA-Z_$][\w$]*$/.test(p)) {
-                s += '.' + p;
-            } else {
-                s += '[' + JSON.stringify(p) + ']';
-            }
-        }
-        return s;
-    }
-
-    function sameJsonPrimitive(a, b) {
-        return Object.is(a, b);
-    }
-
-    function previewJsonValue(value) {
-        let s;
-        try {
-            s = JSON.stringify(value);
-        } catch (e) {
-            s = String(value);
-        }
-        if (s.length > 240) {
-            return s.slice(0, 237) + '...';
-        }
-        return s;
-    }
-
-    function compareJsonValues(a, b, pathParts, out) {
-        if (out.length >= COMPARE_MAX_DIFFS) {
-            return;
-        }
-        const ta = jsonValueType(a);
-        const tb = jsonValueType(b);
-        if (ta !== tb) {
-            out.push({
-                kind: 'type',
-                path: formatJsonPath(pathParts),
-                leftType: ta,
-                rightType: tb,
-                leftVal: a,
-                rightVal: b
-            });
-            return;
-        }
-        if (ta === 'null') {
-            return;
-        }
-        if (ta === 'number' || ta === 'boolean' || ta === 'string') {
-            if (!sameJsonPrimitive(a, b)) {
-                out.push({
-                    kind: 'value',
-                    path: formatJsonPath(pathParts),
-                    leftVal: a,
-                    rightVal: b
-                });
-            }
-            return;
-        }
-        if (ta === 'array') {
-            if (a.length !== b.length) {
-                out.push({
-                    kind: 'length',
-                    path: formatJsonPath(pathParts),
-                    left: a.length,
-                    right: b.length
-                });
-            }
-            const n = Math.min(a.length, b.length);
-            for (let i = 0; i < n; i++) {
-                compareJsonValues(a[i], b[i], pathParts.concat(i), out);
-                if (out.length >= COMPARE_MAX_DIFFS) {
-                    return;
-                }
-            }
-            for (let i = n; i < a.length; i++) {
-                if (out.length >= COMPARE_MAX_DIFFS) {
-                    return;
-                }
-                out.push({
-                    kind: 'only_left',
-                    path: formatJsonPath(pathParts.concat(i)),
-                    leftVal: a[i]
-                });
-            }
-            for (let i = n; i < b.length; i++) {
-                if (out.length >= COMPARE_MAX_DIFFS) {
-                    return;
-                }
-                out.push({
-                    kind: 'only_right',
-                    path: formatJsonPath(pathParts.concat(i)),
-                    rightVal: b[i]
-                });
-            }
-            return;
-        }
-        // object
-        const keysA = Object.keys(a);
-        const keysB = Object.keys(b);
-        const setB = new Set(keysB);
-        const setA = new Set(keysA);
-        for (let i = 0; i < keysA.length; i++) {
-            const k = keysA[i];
-            if (!setB.has(k)) {
-                if (out.length >= COMPARE_MAX_DIFFS) {
-                    return;
-                }
-                out.push({
-                    kind: 'only_left',
-                    path: formatJsonPath(pathParts.concat(k)),
-                    leftVal: a[k]
-                });
-            }
-        }
-        for (let i = 0; i < keysB.length; i++) {
-            const k = keysB[i];
-            if (!setA.has(k)) {
-                if (out.length >= COMPARE_MAX_DIFFS) {
-                    return;
-                }
-                out.push({
-                    kind: 'only_right',
-                    path: formatJsonPath(pathParts.concat(k)),
-                    rightVal: b[k]
-                });
-            }
-        }
-        const common = keysA.filter((k) => setB.has(k));
-        common.sort();
-        for (let i = 0; i < common.length; i++) {
-            const k = common[i];
-            compareJsonValues(a[k], b[k], pathParts.concat(k), out);
-            if (out.length >= COMPARE_MAX_DIFFS) {
-                return;
-            }
-        }
-    }
-
-    function diffKindLabel(kind) {
-        switch (kind) {
-            case 'value':
-                return 'Value differs';
-            case 'type':
-                return 'Type mismatch';
-            case 'length':
-                return 'Array length differs';
-            case 'only_left':
-                return 'Only in JSON A';
-            case 'only_right':
-                return 'Only in JSON B';
-            default:
-                return kind;
-        }
-    }
-
-    function renderCompareDiffItem(d) {
-        const label = diffKindLabel(d.kind);
-        let meta = '';
-        let valuesHtml = '';
-        if (d.kind === 'type') {
-            meta = escapeHtml(d.leftType) + ' vs ' + escapeHtml(d.rightType);
-            valuesHtml = `
+  function renderCompareDiffItem(d) {
+    const label = diffKindLabel(d.kind);
+    let meta = "";
+    let valuesHtml = "";
+    if (d.kind === "type") {
+      meta = escapeHtml(d.leftType) + " vs " + escapeHtml(d.rightType);
+      valuesHtml = `
                 <div class="compare-diff-values">
                     <div>
                         <div class="compare-diff-side-label">JSON A</div>
-                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.leftVal))}</div>
+                        <div class="compare-diff-side">${escapeHtml(d.leftPreview)}</div>
                     </div>
                     <div>
                         <div class="compare-diff-side-label">JSON B</div>
-                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.rightVal))}</div>
+                        <div class="compare-diff-side">${escapeHtml(d.rightPreview)}</div>
                     </div>
                 </div>`;
-        } else if (d.kind === 'value') {
-            valuesHtml = `
+    } else if (d.kind === "value") {
+      valuesHtml = `
                 <div class="compare-diff-values">
                     <div>
                         <div class="compare-diff-side-label">JSON A</div>
-                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.leftVal))}</div>
+                        <div class="compare-diff-side">${escapeHtml(d.leftPreview)}</div>
                     </div>
                     <div>
                         <div class="compare-diff-side-label">JSON B</div>
-                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.rightVal))}</div>
+                        <div class="compare-diff-side">${escapeHtml(d.rightPreview)}</div>
                     </div>
                 </div>`;
-        } else if (d.kind === 'length') {
-            meta = 'length ' + d.left + ' vs ' + d.right;
-        } else if (d.kind === 'only_left') {
-            valuesHtml = `
+    } else if (d.kind === "length") {
+      meta = "length " + d.left + " vs " + d.right;
+    } else if (d.kind === "only_left") {
+      valuesHtml = `
                 <div class="compare-diff-values">
                     <div>
                         <div class="compare-diff-side-label">JSON A</div>
-                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.leftVal))}</div>
+                        <div class="compare-diff-side">${escapeHtml(d.leftPreview)}</div>
                     </div>
                 </div>`;
-        } else if (d.kind === 'only_right') {
-            valuesHtml = `
+    } else if (d.kind === "only_right") {
+      valuesHtml = `
                 <div class="compare-diff-values">
                     <div>
                         <div class="compare-diff-side-label">JSON B</div>
-                        <div class="compare-diff-side">${escapeHtml(previewJsonValue(d.rightVal))}</div>
+                        <div class="compare-diff-side">${escapeHtml(d.rightPreview)}</div>
                     </div>
                 </div>`;
-        }
-        return `
+    }
+    return `
             <li class="compare-diff-item kind-${escapeHtml(d.kind)}">
                 <div class="compare-diff-path">${escapeHtml(d.path)}</div>
-                <div class="compare-diff-meta">${escapeHtml(label)}${meta ? ' · ' + meta : ''}</div>
+                <div class="compare-diff-meta">${escapeHtml(label)}${meta ? " · " + meta : ""}</div>
                 ${valuesHtml}
             </li>`;
-    }
+  }
 
-    function buildCompareReport(diffs, truncated) {
-        const lines = ['JSON semantic comparison', 'Semantically equal: ' + (diffs.length === 0 ? 'yes' : 'no')];
-        if (diffs.length) {
-            lines.push('Differences (' + diffs.length + (truncated ? '+' : '') + '):');
-            for (let i = 0; i < diffs.length; i++) {
-                const d = diffs[i];
-                lines.push('');
-                lines.push((i + 1) + '. ' + d.path + ' — ' + diffKindLabel(d.kind));
-                if (d.kind === 'type') {
-                    lines.push('   Types: ' + d.leftType + ' vs ' + d.rightType);
-                    lines.push('   A: ' + previewJsonValue(d.leftVal));
-                    lines.push('   B: ' + previewJsonValue(d.rightVal));
-                } else if (d.kind === 'value') {
-                    lines.push('   A: ' + previewJsonValue(d.leftVal));
-                    lines.push('   B: ' + previewJsonValue(d.rightVal));
-                } else if (d.kind === 'length') {
-                    lines.push('   Lengths: ' + d.left + ' vs ' + d.right);
-                } else if (d.kind === 'only_left') {
-                    lines.push('   A: ' + previewJsonValue(d.leftVal));
-                } else if (d.kind === 'only_right') {
-                    lines.push('   B: ' + previewJsonValue(d.rightVal));
-                }
-            }
+  function buildCompareReport(diffs, truncated) {
+    const lines = [
+      "JSON semantic comparison",
+      "Semantically equal: " + (diffs.length === 0 ? "yes" : "no"),
+    ];
+    if (diffs.length) {
+      lines.push(
+        "Differences (" + diffs.length + (truncated ? "+" : "") + "):",
+      );
+      for (let i = 0; i < diffs.length; i++) {
+        const d = diffs[i];
+        lines.push("");
+        lines.push(i + 1 + ". " + d.path + " — " + diffKindLabel(d.kind));
+        if (d.kind === "type") {
+          lines.push("   Types: " + d.leftType + " vs " + d.rightType);
+          lines.push("   A: " + d.leftPreview);
+          lines.push("   B: " + d.rightPreview);
+        } else if (d.kind === "value") {
+          lines.push("   A: " + d.leftPreview);
+          lines.push("   B: " + d.rightPreview);
+        } else if (d.kind === "length") {
+          lines.push("   Lengths: " + d.left + " vs " + d.right);
+        } else if (d.kind === "only_left") {
+          lines.push("   A: " + d.leftPreview);
+        } else if (d.kind === "only_right") {
+          lines.push("   B: " + d.rightPreview);
         }
-        if (truncated) {
-            lines.push('');
-            lines.push('(List truncated at ' + COMPARE_MAX_DIFFS + ' differences.)');
-        }
-        return lines.join('\n');
+      }
     }
+    if (truncated) {
+      lines.push("");
+      lines.push("(List truncated at " + COMPARE_MAX_DIFFS + " differences.)");
+    }
+    return lines.join("\n");
+  }
 
-    function runCompare() {
-        hideCompareParseError('a');
-        hideCompareParseError('b');
-        const textA = elements.compareJsonA.value.trim();
-        const textB = elements.compareJsonB.value.trim();
-        if (!textA && !textB) {
-            elements.compareResultsContent.innerHTML = `
+  async function runCompare() {
+    hideCompareParseError("a");
+    hideCompareParseError("b");
+    const textA = elements.compareJsonA.value.trim();
+    const textB = elements.compareJsonB.value.trim();
+    if (!textA && !textB) {
+      elements.compareResultsContent.innerHTML = `
                 <div class="empty-state">
                     <span class="material-icons">info_outline</span>
                     <p>Paste JSON in both panels or load files</p>
                 </div>`;
-            lastCompareReportText = '';
-            return;
-        }
-        const pa = parseCompareJson(textA, 'a');
-        const pb = parseCompareJson(textB, 'b');
-        if (!pa.ok || !pb.ok) {
-            elements.compareResultsContent.innerHTML = `
-                <div class="empty-state error-state">
-                    <span class="material-icons">error_outline</span>
-                    <p>Fix JSON errors in the panels above, then run Compare again</p>
-                </div>`;
-            lastCompareReportText = '';
-            return;
-        }
-        const diffs = [];
-        compareJsonValues(pa.data, pb.data, [], diffs);
-        const truncated = diffs.length >= COMPARE_MAX_DIFFS;
-        lastCompareReportText = buildCompareReport(diffs, truncated);
-        if (diffs.length === 0) {
-            elements.compareResultsContent.innerHTML = `
+      lastCompareReportText = "";
+      return;
+    }
+    let diffs;
+    try {
+      diffs = await task("compare", { a: textA, b: textB });
+    } catch (e) {
+      if (
+        textA !== elements.compareJsonA.value.trim() ||
+        textB !== elements.compareJsonB.value.trim()
+      )
+        return;
+      const side = e.message.startsWith("JSON A:")
+        ? "a"
+        : e.message.startsWith("JSON B:")
+          ? "b"
+          : null;
+      if (side) {
+        showCompareParseError(side, e.message);
+        const line = getErrorLine(e.message, side === "a" ? textA : textB);
+        if (side === "a") compareErrorLineA = line;
+        else compareErrorLineB = line;
+        refreshCompareEditor(side);
+      }
+      elements.compareResultsContent.textContent = e.message;
+      lastCompareReportText = "";
+      return;
+    }
+    if (
+      textA !== elements.compareJsonA.value.trim() ||
+      textB !== elements.compareJsonB.value.trim()
+    )
+      return;
+    const truncated = diffs.length >= COMPARE_MAX_DIFFS;
+    lastCompareReportText = buildCompareReport(diffs, truncated);
+    if (diffs.length === 0) {
+      elements.compareResultsContent.innerHTML = `
                 <div class="compare-summary equal">
                     <span class="material-icons">check_circle</span>
                     <span>No differences — values are semantically equal (key order ignored).</span>
                 </div>`;
-            return;
-        }
-        let html = `
+      return;
+    }
+    let html = `
             <div class="compare-summary diff">
                 <span class="material-icons">warning</span>
-                <span><strong>${diffs.length}${truncated ? '+' : ''}</strong> difference${diffs.length === 1 ? '' : 's'} found</span>
+                <span><strong>${diffs.length}${truncated ? "+" : ""}</strong> difference${diffs.length === 1 ? "" : "s"} found</span>
             </div>
             <ul class="compare-diff-list">`;
-        for (let i = 0; i < diffs.length; i++) {
-            html += renderCompareDiffItem(diffs[i]);
-        }
-        html += '</ul>';
-        if (truncated) {
-            html += `<p class="compare-diff-truncated">List truncated at ${COMPARE_MAX_DIFFS} differences.</p>`;
-        }
-        elements.compareResultsContent.innerHTML = html;
+    for (let i = 0; i < diffs.length; i++) {
+      html += renderCompareDiffItem(diffs[i]);
+    }
+    html += "</ul>";
+    if (truncated) {
+      html += `<p class="compare-diff-truncated">List truncated at ${COMPARE_MAX_DIFFS} differences.</p>`;
+    }
+    elements.compareResultsContent.innerHTML = html;
+  }
+
+  function copyCompareReport() {
+    if (!lastCompareReportText) {
+      showToast("Run Compare first to generate a report", "error");
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard
+        .writeText(lastCompareReportText)
+        .then(() => {
+          showToast("Report copied to clipboard", "success");
+        })
+        .catch(() => showToast("Could not copy", "error"));
+    } else {
+      showToast("Clipboard not available", "error");
+    }
+  }
+
+  // ============ YAML <-> JSON ============
+  // The YAML pane is a live two-way view of the document: the JSON side of the
+  // old converter is now the main source editor, so nothing has to be copied
+  // across by hand.
+  function initYaml() {
+    elements.yamlCopyBtn.addEventListener("click", copyYamlOutput);
+    elements.yamlDownloadBtn.addEventListener("click", downloadYaml);
+    elements.uploadYaml.addEventListener("change", uploadYamlFile);
+
+    elements.yamlYamlEditor.addEventListener("input", onYamlInput);
+    elements.yamlYamlScroll.addEventListener("click", () =>
+      elements.yamlYamlEditor.focus(),
+    );
+  }
+
+  function onYamlInput() {
+    hideYamlError("yaml");
+    clearTimeout(yamlDebounce);
+    yamlDebounce = setTimeout(applyYamlToDocument, 300);
+  }
+
+  async function syncYamlFromDocument() {
+    const text = elements.editor.value;
+    const yamlBefore = elements.yamlYamlEditor.value;
+    if (yamlSyncing) return;
+
+    if (!elements.editor.value.trim()) {
+      yamlSyncing = true;
+      elements.yamlYamlEditor.value = "";
+      yamlYamlErrorLine = null;
+      hideYamlError("yaml");
+      yamlSyncing = false;
+      renderYamlStats(null);
+      return;
     }
 
-    function copyCompareReport() {
-        if (!lastCompareReportText) {
-            showToast('Run Compare first to generate a report', 'error');
-            return;
-        }
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(lastCompareReportText).then(() => {
-                showToast('Report copied to clipboard', 'success');
-            }).catch(() => showToast('Could not copy', 'error'));
-        } else {
-            showToast('Clipboard not available', 'error');
-        }
+    if (jsonError) {
+      showYamlError(
+        "yaml",
+        "Document is not valid JSON — fix it in the source pane",
+      );
+      renderYamlStats(null);
+      return;
     }
 
-    // ============ YAML <-> JSON ============
-    // Dependency-free YAML engine. Serializer is full-coverage; parser supports the
-    // practical subset engineers use: block & flow collections, |/> block scalars
-    // (with chomping), comments, anchors/aliases, merge keys (<<) and multi-document.
-    const YAML = (function() {
-        /* ---------- JSON -> YAML (serializer) ---------- */
-        function stringify(value) {
-            const lines = [];
-
-            function inferWouldChange(str) {
-                const parsed = parseScalarText(str);
-                return typeof parsed !== 'string' || parsed !== str;
-            }
-
-            function needsQuoting(str) {
-                if (str === '') return true;
-                if (inferWouldChange(str)) return true;
-                if (/^\s|\s$/.test(str)) return true;                 // leading/trailing whitespace
-                if (/^[,\[\]{}#&*!|>'"%@`]/.test(str)) return true;   // flow/indicator start chars
-                if (/^[-?:](\s|$)/.test(str)) return true;            // "- ", "? ", ": " / bare "-"
-                if (/:(\s|$)/.test(str)) return true;                 // "key: val" ambiguity
-                if (/(^|\s)#/.test(str)) return true;                 // inline comment ambiguity
-                if (/[\t\r\x00-\x08\x0b\x0c\x0e-\x1f]/.test(str)) return true; // control chars
-                return false;
-            }
-
-            function quoteDouble(str) {
-                let out = '"';
-                for (const ch of str) {
-                    const code = ch.codePointAt(0);
-                    if (ch === '"') out += '\\"';
-                    else if (ch === '\\') out += '\\\\';
-                    else if (ch === '\n') out += '\\n';
-                    else if (ch === '\t') out += '\\t';
-                    else if (ch === '\r') out += '\\r';
-                    else if (code < 0x20) out += '\\x' + code.toString(16).padStart(2, '0');
-                    else out += ch;
-                }
-                return out + '"';
-            }
-
-            function formatScalar(v) {
-                if (v === null) return 'null';
-                if (v === true) return 'true';
-                if (v === false) return 'false';
-                if (typeof v === 'number') {
-                    if (!isFinite(v)) return quoteDouble(String(v));
-                    return String(v);
-                }
-                const str = String(v);
-                return needsQuoting(str) ? quoteDouble(str) : str;
-            }
-
-            function blockScalarSafe(str) {
-                if (str.indexOf('\r') !== -1) return false;
-                const body = str.endsWith('\n') ? str.slice(0, -1) : str;
-                for (const line of body.split('\n')) {
-                    if (/^\s/.test(line)) return false;   // leading whitespace needs indent indicator
-                    if (/\s$/.test(line)) return false;   // trailing whitespace gets stripped on parse
-                }
-                return true;
-            }
-
-            function isEmpty(v) {
-                if (Array.isArray(v)) return v.length === 0;
-                if (v && typeof v === 'object') return Object.keys(v).length === 0;
-                return false;
-            }
-
-            function emitBlockScalarInline(str, indent) {
-                const pad = '  '.repeat(indent);
-                const k = str.match(/\n*$/)[0].length; // trailing newline count
-                let header, contentLines, trailingBlanks;
-                if (k === 0) { header = '|-'; contentLines = str.split('\n'); trailingBlanks = 0; }
-                else if (k === 1) { header = '|'; contentLines = str.slice(0, -1).split('\n'); trailingBlanks = 0; }
-                else { header = '|+'; contentLines = str.replace(/\n+$/, '').split('\n'); trailingBlanks = k - 1; }
-                lines[lines.length - 1] += ' ' + header;
-                for (const line of contentLines) lines.push(line === '' ? '' : pad + line);
-                for (let n = 0; n < trailingBlanks; n++) lines.push('');
-            }
-
-            function emitMapping(obj, indent) {
-                const pad = '  '.repeat(indent);
-                for (const key of Object.keys(obj)) {
-                    const v = obj[key];
-                    const keyStr = needsQuoting(key) ? quoteDouble(key) : key;
-                    if (v === null || typeof v !== 'object') {
-                        if (typeof v === 'string' && v.indexOf('\n') !== -1 && blockScalarSafe(v)) {
-                            lines.push(pad + keyStr + ':');
-                            emitBlockScalarInline(v, indent + 1);
-                        } else {
-                            lines.push(pad + keyStr + ': ' + formatScalar(v));
-                        }
-                    } else if (isEmpty(v)) {
-                        lines.push(pad + keyStr + ': ' + (Array.isArray(v) ? '[]' : '{}'));
-                    } else if (Array.isArray(v)) {
-                        lines.push(pad + keyStr + ':');
-                        emitSequence(v, indent + 1);
-                    } else {
-                        lines.push(pad + keyStr + ':');
-                        emitMapping(v, indent + 1);
-                    }
-                }
-            }
-
-            function emitSequence(arr, indent) {
-                const pad = '  '.repeat(indent);
-                for (const v of arr) {
-                    if (v === null || typeof v !== 'object') {
-                        if (typeof v === 'string' && v.indexOf('\n') !== -1 && blockScalarSafe(v)) {
-                            lines.push(pad + '-');
-                            emitBlockScalarInline(v, indent + 1);
-                        } else {
-                            lines.push(pad + '- ' + formatScalar(v));
-                        }
-                    } else if (isEmpty(v)) {
-                        lines.push(pad + '- ' + (Array.isArray(v) ? '[]' : '{}'));
-                    } else if (Array.isArray(v)) {
-                        lines.push(pad + '-');
-                        emitSequence(v, indent + 1);
-                    } else {
-                        emitSeqMapping(v, indent);
-                    }
-                }
-            }
-
-            function emitSeqMapping(obj, indent) {
-                const pad = '  '.repeat(indent);
-                const childPad = '  '.repeat(indent + 1);
-                const before = lines.length;
-                emitMapping(obj, indent + 1);
-                if (lines.length > before) {
-                    lines[before] = pad + '- ' + lines[before].slice(childPad.length);
-                }
-            }
-
-            if (value === null || typeof value !== 'object') return formatScalar(value) + '\n';
-            if (isEmpty(value)) return (Array.isArray(value) ? '[]' : '{}') + '\n';
-            if (Array.isArray(value)) emitSequence(value, 0);
-            else emitMapping(value, 0);
-            return lines.join('\n') + '\n';
-        }
-
-        /* ---------- scalar parsing (shared) ---------- */
-        function parseScalarText(s) {
-            if (s === '' || s === '~' || s === 'null' || s === 'Null' || s === 'NULL') return null;
-            if (s === 'true' || s === 'True' || s === 'TRUE') return true;
-            if (s === 'false' || s === 'False' || s === 'FALSE') return false;
-            if (/^[-+]?0[0-9_]+$/.test(s)) return s;                 // leading zero -> string (zip, id)
-            if (/^[-+]?[0-9]+$/.test(s)) {
-                const n = parseInt(s, 10);
-                return Number.isSafeInteger(n) ? n : s;             // preserve big ints as string
-            }
-            if (/^0x[0-9a-fA-F]+$/.test(s)) return parseInt(s, 16);
-            if (/^0o[0-7]+$/.test(s)) return parseInt(s.slice(2), 8);
-            if (/^[-+]?(\.[0-9]+|[0-9]+\.?[0-9]*)([eE][-+]?[0-9]+)?$/.test(s) && /[0-9]/.test(s)) {
-                return parseFloat(s);
-            }
-            return s;
-        }
-
-        /* ---------- YAML -> JSON (parser) ---------- */
-        function parse(text) {
-            text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
-            const raw = text.split('\n');
-            // Drop the phantom empty line from a terminating newline so block-scalar
-            // trailing-blank accounting is not off by one.
-            if (raw.length > 1 && raw[raw.length - 1] === '' && text.endsWith('\n')) raw.pop();
-
-            const lines = raw.map((l, idx) => {
-                const ws = l.match(/^([ \t]*)/)[1];
-                if (ws.indexOf('\t') !== -1 && l.slice(ws.length) !== '') {
-                    throw new Error('Tabs cannot be used for indentation (line ' + (idx + 1) + ')');
-                }
-                const content = l.slice(ws.length);
-                const trimmed = content.replace(/\s+$/, '');
-                return {
-                    indent: ws.length,
-                    content: content,
-                    lineNo: idx + 1,
-                    blank: trimmed === '',
-                    comment: trimmed[0] === '#'
-                };
-            });
-
-            const docs = [];
-            let cur = [];
-            for (const ln of lines) {
-                if (ln.indent === 0 && (ln.content.trim() === '---' || /^---\s/.test(ln.content))) {
-                    docs.push(cur); cur = [];
-                    const after = ln.content.trim().replace(/^---\s*/, '');
-                    if (after) cur.push({ indent: 0, content: after, lineNo: ln.lineNo, blank: false, comment: after[0] === '#' });
-                    continue;
-                }
-                if (ln.indent === 0 && ln.content.trim() === '...') { docs.push(cur); cur = []; continue; }
-                cur.push(ln);
-            }
-            docs.push(cur);
-            const docSets = docs.filter(d => d.some(l => !l.blank && !l.comment));
-
-            const results = docSets.length ? docSets.map(parseDocument) : [null];
-            return results.length === 1 ? results[0] : results;
-        }
-
-        function parseDocument(docLines) {
-            const anchors = {};
-            let i = 0;
-
-            function nextSig() {
-                let j = i;
-                while (j < docLines.length && (docLines[j].blank || docLines[j].comment)) j++;
-                return j < docLines.length ? j : -1;
-            }
-
-            function stripComment(s) {
-                let depth = 0;
-                for (let k = 0; k < s.length; k++) {
-                    const c = s[k];
-                    if (c === '"') { k = skipDouble(s, k) - 1; continue; }
-                    if (c === "'") { k = skipSingle(s, k) - 1; continue; }
-                    if (c === '[' || c === '{') depth++;
-                    else if (c === ']' || c === '}') depth--;
-                    else if (c === '#' && (k === 0 || /\s/.test(s[k - 1]))) return s.slice(0, k);
-                }
-                return s;
-            }
-
-            function findKeyColon(s) {
-                let depth = 0;
-                for (let k = 0; k < s.length; k++) {
-                    const c = s[k];
-                    if (c === '"') { k = skipDouble(s, k) - 1; continue; }
-                    if (c === "'") { k = skipSingle(s, k) - 1; continue; }
-                    if (c === '[' || c === '{') depth++;
-                    else if (c === ']' || c === '}') depth--;
-                    else if (c === '#' && k > 0 && /\s/.test(s[k - 1])) break;
-                    else if (c === ':' && depth === 0) {
-                        const nx = s[k + 1];
-                        if (nx === undefined || nx === ' ' || nx === '\t') return k;
-                    }
-                }
-                return -1;
-            }
-
-            function isSeqEntry(content) { return /^-(\s|$)/.test(content); }
-
-            function parseNodeAt(indent) {
-                const j = nextSig();
-                if (j === -1) return null;
-                const line = docLines[j];
-                if (line.indent < indent) return null;
-                if (isSeqEntry(line.content)) return parseSequence(line.indent);
-                if (findKeyColon(line.content) !== -1) return parseMapping(line.indent);
-                i = j + 1;
-                return parseValueToken(line.content, line.indent, line);
-            }
-
-            function parseMapping(indent) {
-                const obj = {};
-                const merges = [];
-                while (true) {
-                    const j = nextSig();
-                    if (j === -1) break;
-                    const line = docLines[j];
-                    if (line.indent < indent) break;
-                    if (line.indent > indent) throw new Error('Bad indentation (line ' + line.lineNo + ')');
-                    if (isSeqEntry(line.content)) break;
-                    const colon = findKeyColon(line.content);
-                    if (colon === -1) throw new Error('Expected "key: value" (line ' + line.lineNo + ')');
-                    const keyText = line.content.slice(0, colon).trim();
-                    const rest = line.content.slice(colon + 1).trim();
-                    i = j + 1;
-                    const key = parseKey(keyText);
-                    const value = parseAfterColon(rest, indent, line);
-                    if (key === '<<') {
-                        if (Array.isArray(value)) merges.push(...value);
-                        else merges.push(value);
-                    } else {
-                        obj[key] = value;
-                    }
-                }
-                if (merges.length) {
-                    const base = {};
-                    for (const m of merges) if (m && typeof m === 'object') Object.assign(base, m);
-                    return Object.assign(base, obj);
-                }
-                return obj;
-            }
-
-            function parseKey(keyText) {
-                if (keyText === '') return '';
-                if (keyText[0] === '"') return readDouble(keyText, 0)[0];
-                if (keyText[0] === "'") return readSingle(keyText, 0)[0];
-                return keyText;
-            }
-
-            function parseAfterColon(rest, keyIndent, line) {
-                if (rest === '') {
-                    const j = nextSig();
-                    if (j === -1) return null;
-                    const child = docLines[j];
-                    if (child.indent > keyIndent) return parseNodeAt(child.indent);
-                    if (child.indent === keyIndent && isSeqEntry(child.content)) return parseSequence(keyIndent);
-                    return null;
-                }
-                const am = rest.match(/^&(\S+)\s*$/);
-                if (am) {
-                    const val = parseAfterColon('', keyIndent, line);
-                    anchors[am[1]] = val;
-                    return val;
-                }
-                return parseValueToken(rest, keyIndent, line);
-            }
-
-            function parseSequence(indent) {
-                const arr = [];
-                while (true) {
-                    const j = nextSig();
-                    if (j === -1) break;
-                    const line = docLines[j];
-                    if (line.indent < indent) break;
-                    if (line.indent > indent) throw new Error('Bad indentation (line ' + line.lineNo + ')');
-                    if (!isSeqEntry(line.content)) break;
-                    const dash = line.content.match(/^-(\s+|$)/)[0];
-                    const after = line.content.slice(dash.length);
-                    const contentIndent = line.indent + dash.length;
-                    if (after === '') {
-                        i = j + 1;
-                        const k = nextSig();
-                        if (k !== -1 && docLines[k].indent > line.indent) {
-                            arr.push(parseNodeAt(docLines[k].indent));
-                        } else {
-                            arr.push(null);
-                        }
-                    } else {
-                        // rewrite line so the dash becomes leading space, then parse a node there
-                        docLines[j] = { indent: contentIndent, content: after, lineNo: line.lineNo, blank: false, comment: false };
-                        arr.push(parseNodeAt(contentIndent));
-                    }
-                }
-                return arr;
-            }
-
-            function parseValueToken(token, indent, line) {
-                token = stripComment(token).trim();
-                if (token === '') return null;
-                let forceStr = false;
-                if (token[0] === '!') {
-                    const tm = token.match(/^!\S*\s*/);
-                    forceStr = /^!!str\b/.test(token);
-                    token = token.slice(tm[0].length);
-                    if (token === '') return forceStr ? '' : null;
-                }
-                const am = token.match(/^&(\S+)\s+/);
-                if (am) {
-                    const val = parseValueToken(token.slice(am[0].length), indent, line);
-                    anchors[am[1]] = val;
-                    return val;
-                }
-                if (token[0] === '*') {
-                    const name = token.slice(1).trim();
-                    if (!(name in anchors)) throw new Error('Unknown alias *' + name + ' (line ' + line.lineNo + ')');
-                    return deepClone(anchors[name]);
-                }
-                if (token === '|' || token === '>' || /^[|>][+-]?[0-9]?$/.test(token)) {
-                    return parseBlockScalar(token, indent);
-                }
-                if (token[0] === '[' || token[0] === '{') {
-                    return parseFlow(token, 0)[0];
-                }
-                if (token[0] === '"') return readDouble(token, 0)[0];
-                if (token[0] === "'") return readSingle(token, 0)[0];
-                return forceStr ? token : parseScalarText(token);
-            }
-
-            function parseBlockScalar(header, parentIndent) {
-                const style = header[0]; // | or >
-                let chomp = '';
-                let explicitIndent = 0;
-                for (let k = 1; k < header.length; k++) {
-                    const c = header[k];
-                    if (c === '+' || c === '-') chomp = c;
-                    else if (/[0-9]/.test(c)) explicitIndent = parseInt(c, 10);
-                }
-                const collected = [];
-                let blockIndent = explicitIndent ? parentIndent + explicitIndent : null;
-                while (i < docLines.length) {
-                    const ln = docLines[i];
-                    if (ln.blank) { collected.push(''); i++; continue; }
-                    if (ln.indent <= parentIndent) break;
-                    if (blockIndent === null) blockIndent = ln.indent;
-                    if (ln.indent < blockIndent) break;
-                    const full = ' '.repeat(ln.indent) + ln.content;
-                    collected.push(full.slice(blockIndent));
-                    i++;
-                }
-                let end = collected.length;
-                while (end > 0 && collected[end - 1] === '') end--;
-                const contentLines = collected.slice(0, end);
-                const trailingBlanks = collected.length - end;
-
-                let body;
-                if (style === '|') {
-                    body = contentLines.join('\n');
-                } else {
-                    body = '';
-                    for (let k = 0; k < contentLines.length; k++) {
-                        const l = contentLines[k];
-                        if (k === 0) body = l;
-                        else if (l === '' || contentLines[k - 1] === '') body += '\n' + l;
-                        else if (/^\s/.test(l) || /^\s/.test(contentLines[k - 1])) body += '\n' + l;
-                        else body += ' ' + l;
-                    }
-                }
-                if (!contentLines.length) return chomp === '+' ? '\n'.repeat(trailingBlanks) : '';
-                if (chomp === '-') return body;                                     // strip
-                if (chomp === '+') return body + '\n' + '\n'.repeat(trailingBlanks); // keep
-                return body + '\n';                                                // clip
-            }
-
-            function parseFlow(s, idx) {
-                idx = skipWs(s, idx);
-                const c = s[idx];
-                if (c === '[') return parseFlowSeq(s, idx);
-                if (c === '{') return parseFlowMap(s, idx);
-                return parseFlowScalar(s, idx);
-            }
-
-            function parseFlowSeq(s, idx) {
-                const arr = [];
-                idx = skipWs(s, idx + 1);
-                if (s[idx] === ']') return [arr, idx + 1];
-                while (idx < s.length) {
-                    idx = skipWs(s, idx);
-                    if (s[idx] === ']') { idx++; break; }
-                    if (s[idx] === ',') { arr.push(null); idx++; continue; }
-                    const [val, next] = parseFlow(s, idx);
-                    arr.push(val);
-                    idx = skipWs(s, next);
-                    if (s[idx] === ',') { idx++; continue; }
-                    if (s[idx] === ']') { idx++; break; }
-                    throw new Error('Malformed flow sequence');
-                }
-                return [arr, idx];
-            }
-
-            function parseFlowMap(s, idx) {
-                const obj = {};
-                idx = skipWs(s, idx + 1);
-                if (s[idx] === '}') return [obj, idx + 1];
-                while (idx < s.length) {
-                    idx = skipWs(s, idx);
-                    if (s[idx] === '}') { idx++; break; }
-                    let key, next;
-                    if (s[idx] === '"') { [key, next] = readDouble(s, idx); }
-                    else if (s[idx] === "'") { [key, next] = readSingle(s, idx); }
-                    else {
-                        let k = idx;
-                        while (k < s.length && s[k] !== ':' && s[k] !== ',' && s[k] !== '}') k++;
-                        key = s.slice(idx, k).trim();
-                        next = k;
-                    }
-                    idx = skipWs(s, next);
-                    if (s[idx] === ':') {
-                        idx = skipWs(s, idx + 1);
-                        if (s[idx] === ',' || s[idx] === '}') { obj[key] = null; }
-                        else { const [val, n2] = parseFlow(s, idx); obj[key] = val; idx = skipWs(s, n2); }
-                    } else {
-                        obj[key] = null;
-                    }
-                    if (s[idx] === ',') { idx++; continue; }
-                    if (s[idx] === '}') { idx++; break; }
-                }
-                return [obj, idx];
-            }
-
-            function parseFlowScalar(s, idx) {
-                const c = s[idx];
-                if (c === '"') return readDouble(s, idx);
-                if (c === "'") return readSingle(s, idx);
-                if (c === '*') {
-                    let k = idx + 1;
-                    while (k < s.length && s[k] !== ',' && s[k] !== ']' && s[k] !== '}') k++;
-                    const name = s.slice(idx + 1, k).trim();
-                    if (!(name in anchors)) throw new Error('Unknown alias *' + name);
-                    return [deepClone(anchors[name]), k];
-                }
-                let k = idx;
-                while (k < s.length && s[k] !== ',' && s[k] !== ']' && s[k] !== '}') k++;
-                return [parseScalarText(s.slice(idx, k).trim()), k];
-            }
-
-            return parseNodeAt(0);
-        }
-
-        /* ---------- low-level scalar readers ---------- */
-        function skipWs(s, i) { while (i < s.length && (s[i] === ' ' || s[i] === '\t')) i++; return i; }
-
-        function skipDouble(s, i) {
-            i++;
-            while (i < s.length) {
-                if (s[i] === '\\') { i += 2; continue; }
-                if (s[i] === '"') return i + 1;
-                i++;
-            }
-            return i;
-        }
-
-        function skipSingle(s, i) {
-            i++;
-            while (i < s.length) {
-                if (s[i] === "'") {
-                    if (s[i + 1] === "'") { i += 2; continue; }
-                    return i + 1;
-                }
-                i++;
-            }
-            return i;
-        }
-
-        function readDouble(s, i) {
-            i++;
-            let out = '';
-            while (i < s.length) {
-                const c = s[i];
-                if (c === '\\') {
-                    const n = s[i + 1];
-                    if (n === 'n') out += '\n';
-                    else if (n === 't') out += '\t';
-                    else if (n === 'r') out += '\r';
-                    else if (n === '"') out += '"';
-                    else if (n === '\\') out += '\\';
-                    else if (n === '/') out += '/';
-                    else if (n === 'b') out += '\b';
-                    else if (n === 'f') out += '\f';
-                    else if (n === '0') out += '\0';
-                    else if (n === 'u') { out += String.fromCharCode(parseInt(s.substr(i + 2, 4), 16)); i += 4; }
-                    else if (n === 'x') { out += String.fromCharCode(parseInt(s.substr(i + 2, 2), 16)); i += 2; }
-                    else out += n;
-                    i += 2;
-                    continue;
-                }
-                if (c === '"') return [out, i + 1];
-                out += c;
-                i++;
-            }
-            throw new Error('Unterminated double-quoted string');
-        }
-
-        function readSingle(s, i) {
-            i++;
-            let out = '';
-            while (i < s.length) {
-                const c = s[i];
-                if (c === "'") {
-                    if (s[i + 1] === "'") { out += "'"; i += 2; continue; }
-                    return [out, i + 1];
-                }
-                out += c;
-                i++;
-            }
-            throw new Error('Unterminated single-quoted string');
-        }
-
-        function deepClone(v) {
-            if (v === null || typeof v !== 'object') return v;
-            if (Array.isArray(v)) return v.map(deepClone);
-            const o = {};
-            for (const k of Object.keys(v)) o[k] = deepClone(v[k]);
-            return o;
-        }
-
-        return { stringify: stringify, parse: parse };
-    })();
-
-    // The YAML pane is a live two-way view of the document: the JSON side of the
-    // old converter is now the main source editor, so nothing has to be copied
-    // across by hand.
-    function initYaml() {
-        elements.yamlCopyBtn.addEventListener('click', copyYamlOutput);
-        elements.yamlDownloadBtn.addEventListener('click', downloadYaml);
-        elements.uploadYaml.addEventListener('change', uploadYamlFile);
-
-        elements.yamlYamlEditor.addEventListener('input', onYamlInput);
-        elements.yamlYamlEditor.addEventListener('keydown', handleYamlKeyDown);
-        elements.yamlYamlEditor.addEventListener('click', () => scrollToCaretYaml('yaml'));
-        elements.yamlYamlEditor.addEventListener('keyup', () => scrollToCaretYaml('yaml'));
-        elements.yamlYamlScroll.addEventListener('scroll', () => syncYamlLineNumbers('yaml'), { passive: true });
-        elements.yamlYamlScroll.addEventListener('click', () => elements.yamlYamlEditor.focus());
-
-        refreshYamlEditor('yaml');
+    let out;
+    try {
+      out = await task("yamlEncode", { text });
+      if (
+        text !== elements.editor.value ||
+        yamlBefore !== elements.yamlYamlEditor.value
+      )
+        return;
+    } catch (err) {
+      showYamlError("yaml", err.message || "Could not serialize to YAML");
+      renderYamlStats(null);
+      return;
     }
 
-    function onYamlInput() {
-        hideYamlError('yaml');
-        refreshYamlEditor('yaml');
-        scrollToCaretYaml('yaml');
-        clearTimeout(yamlDebounce);
-        yamlDebounce = setTimeout(applyYamlToDocument, 300);
+    yamlSyncing = true;
+    elements.yamlYamlEditor.value = out;
+    yamlYamlErrorLine = null;
+    hideYamlError("yaml");
+    yamlSyncing = false;
+    renderYamlStats(out);
+  }
+
+  // YAML -> document
+  async function applyYamlToDocument() {
+    const sourceBefore = elements.editor.value;
+    const text = elements.yamlYamlEditor.value;
+    if (!text.trim()) return;
+
+    let data;
+    try {
+      data = await task("yamlDecode", { text });
+      if (
+        text !== elements.yamlYamlEditor.value ||
+        sourceBefore !== elements.editor.value
+      )
+        return;
+    } catch (err) {
+      if (
+        text !== elements.yamlYamlEditor.value ||
+        sourceBefore !== elements.editor.value
+      )
+        return;
+      const msg = err.message || "Invalid YAML";
+      const m = msg.match(/\(line (\d+)\)/);
+      showYamlError("yaml", msg);
+      yamlYamlErrorLine = m ? parseInt(m[1], 10) : null;
+      elements.yamlYamlEditor.setError(yamlYamlErrorLine);
+      return;
     }
 
-    function handleYamlKeyDown(e) {
-        if (e.key !== 'Tab') return;
-        e.preventDefault();
-        const ta = e.target;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
-        ta.selectionStart = ta.selectionEnd = start + 2;
-        hideYamlError('yaml');
-        refreshYamlEditor('yaml');
-        clearTimeout(yamlDebounce);
-        yamlDebounce = setTimeout(applyYamlToDocument, 300);
-    }
+    hideYamlError("yaml");
+    yamlYamlErrorLine = null;
 
-    // Document -> YAML
-    function syncYamlFromDocument() {
-        if (yamlSyncing) return;
+    yamlSyncing = true;
+    elements.editor.value = data;
+    documentRevision++;
+    updateCursorStatus();
+    await validateJson();
+    saveToStorage();
+    yamlSyncing = false;
 
-        if (!elements.editor.value.trim()) {
-            yamlSyncing = true;
-            elements.yamlYamlEditor.value = '';
-            yamlYamlErrorLine = null;
-            hideYamlError('yaml');
-            refreshYamlEditor('yaml');
-            yamlSyncing = false;
-            renderYamlStats(null);
-            return;
-        }
+    renderYamlStats(text);
+  }
 
-        if (jsonError) {
-            showYamlError('yaml', 'Document is not valid JSON — fix it in the source pane');
-            renderYamlStats(null);
-            return;
-        }
+  function renderYamlStats(yamlText) {
+    if (!elements.yamlInfoContent) return;
 
-        let out;
-        try {
-            out = YAML.stringify(currentJson);
-        } catch (err) {
-            showYamlError('yaml', err.message || 'Could not serialize to YAML');
-            renderYamlStats(null);
-            return;
-        }
-
-        yamlSyncing = true;
-        elements.yamlYamlEditor.value = out;
-        yamlYamlErrorLine = null;
-        hideYamlError('yaml');
-        refreshYamlEditor('yaml');
-        yamlSyncing = false;
-        renderYamlStats(out);
-    }
-
-    // YAML -> document
-    function applyYamlToDocument() {
-        const text = elements.yamlYamlEditor.value;
-        if (!text.trim()) return;
-
-        let data;
-        try {
-            data = YAML.parse(text);
-        } catch (err) {
-            const msg = err.message || 'Invalid YAML';
-            const m = msg.match(/\(line (\d+)\)/);
-            yamlYamlErrorLine = m ? parseInt(m[1], 10) : null;
-            showYamlError('yaml', msg);
-            refreshYamlEditor('yaml');
-            return;
-        }
-
-        hideYamlError('yaml');
-        yamlYamlErrorLine = null;
-        refreshYamlEditor('yaml');
-
-        yamlSyncing = true;
-        elements.editor.value = JSON.stringify(data, null, 2);
-        updateLineNumbers();
-        updateSyntaxHighlight();
-        updateCursorStatus();
-        validateJson();
-        saveToStorage();
-        yamlSyncing = false;
-
-        renderYamlStats(text);
-    }
-
-    function renderYamlStats(yamlText) {
-        if (!elements.yamlInfoContent) return;
-
-        if (!yamlText || currentJson === null) {
-            elements.yamlInfoContent.innerHTML = `
+    if (!yamlText || currentJson === undefined) {
+      elements.yamlInfoContent.innerHTML = `
                 <div class="empty-state">
                     <span class="material-icons">compare_arrows</span>
                     <p>Size statistics appear once the document converts</p>
                 </div>`;
-            return;
-        }
+      return;
+    }
 
-        const encoder = new TextEncoder();
-        const jsonSize = encoder.encode(JSON.stringify(currentJson)).length;
-        const yamlSize = encoder.encode(yamlText).length;
-        const maxSize = Math.max(jsonSize, yamlSize, 1);
-        const diff = jsonSize - yamlSize;
-        const diffPercent = jsonSize > 0 ? Math.abs((diff / jsonSize) * 100).toFixed(1) : '0.0';
-        const isSmaller = diff > 0;
+    const encoder = new TextEncoder();
+    const jsonSize = encoder.encode(stringifyJson(currentJson)).length;
+    const yamlSize = encoder.encode(yamlText).length;
+    const maxSize = Math.max(jsonSize, yamlSize, 1);
+    const diff = jsonSize - yamlSize;
+    const diffPercent =
+      jsonSize > 0 ? Math.abs((diff / jsonSize) * 100).toFixed(1) : "0.0";
+    const isSmaller = diff > 0;
 
-        elements.yamlInfoContent.innerHTML = `
+    elements.yamlInfoContent.innerHTML = `
             <div class="size-comparison">
                 <div class="size-bar-container">
                     <div class="size-bar-label">
@@ -4526,7 +2403,7 @@
                         <span class="value">${formatBytes(jsonSize)}</span>
                     </div>
                     <div class="size-bar">
-                        <div class="size-bar-fill json" style="width: ${(jsonSize / maxSize * 100).toFixed(0)}%"></div>
+                        <div class="size-bar-fill json" style="width: ${((jsonSize / maxSize) * 100).toFixed(0)}%"></div>
                     </div>
                 </div>
                 <div class="size-bar-container">
@@ -4535,14 +2412,14 @@
                         <span class="value">${formatBytes(yamlSize)}</span>
                     </div>
                     <div class="size-bar">
-                        <div class="size-bar-fill yaml" style="width: ${(yamlSize / maxSize * 100).toFixed(0)}%"></div>
+                        <div class="size-bar-fill yaml" style="width: ${((yamlSize / maxSize) * 100).toFixed(0)}%"></div>
                     </div>
                 </div>
                 <div class="size-diff">
-                    <div class="diff-value ${isSmaller ? 'positive' : 'negative'}">
-                        ${isSmaller ? '-' : '+'}${formatBytes(Math.abs(diff))} (${diffPercent}%)
+                    <div class="diff-value ${isSmaller ? "positive" : "negative"}">
+                        ${isSmaller ? "-" : "+"}${formatBytes(Math.abs(diff))} (${diffPercent}%)
                     </div>
-                    <div class="diff-label">${isSmaller ? 'YAML smaller' : 'YAML larger'}</div>
+                    <div class="diff-label">${isSmaller ? "YAML smaller" : "YAML larger"}</div>
                 </div>
             </div>
             <div class="detail-section">
@@ -4551,356 +2428,274 @@
                     YAML 1.2 core schema — block &amp; flow styles, anchors and merge keys are understood on input. Editing this pane rewrites the document.
                 </div>
             </div>`;
+  }
+
+  function showYamlError(which, message) {
+    elements.yamlErrorYaml.hidden = false;
+    elements.yamlErrorYaml.textContent = message;
+  }
+
+  function hideYamlError() {
+    elements.yamlYamlEditor.setError(null);
+    elements.yamlErrorYaml.hidden = true;
+    elements.yamlErrorYaml.textContent = "";
+    yamlYamlErrorLine = null;
+  }
+
+  function copyYamlOutput() {
+    const text = elements.yamlYamlEditor.value;
+    if (!text.trim()) {
+      showToast("Nothing to copy", "error");
+      return;
     }
+    navigator.clipboard
+      .writeText(text)
+      .then(() => showToast("YAML copied to clipboard", "success"))
+      .catch(() => showToast("Failed to copy", "error"));
+  }
 
-    function refreshYamlEditor(which) {
-        if (which !== 'yaml') return;
-        updateLineNumbersFor(elements.yamlYamlEditor, elements.yamlYamlLineNumbers, yamlYamlErrorLine);
-        let html = highlightYaml(elements.yamlYamlEditor.value);
-        if (yamlYamlErrorLine !== null) {
-            const ls = html.split('\n');
-            if (yamlYamlErrorLine >= 1 && yamlYamlErrorLine <= ls.length) {
-                ls[yamlYamlErrorLine - 1] = '<span class="error-line">' + ls[yamlYamlErrorLine - 1] + '</span>';
-                html = ls.join('\n');
-            }
-        }
-        elements.yamlYamlSyntax.innerHTML = html + '\n';
+  function downloadYaml() {
+    const text = elements.yamlYamlEditor.value;
+    if (!text.trim()) {
+      showToast("Nothing to download", "error");
+      return;
     }
+    const blob = new Blob([text], { type: "application/x-yaml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "data.yaml";
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("YAML downloaded", "success");
+  }
 
-    function syncYamlLineNumbers() {
-        elements.yamlYamlLineNumbers.scrollTop = elements.yamlYamlScroll.scrollTop;
-    }
+  function uploadYamlFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      elements.yamlYamlEditor.value = e.target.result;
+      hideYamlError("yaml");
+      applyYamlToDocument();
+      showToast("YAML loaded from " + file.name, "success");
+    };
+    reader.onerror = () => showToast("Failed to read file", "error");
+    reader.readAsText(file);
+    event.target.value = "";
+  }
 
-    function scrollToCaretYaml() {
-        ensureCaretVisible(elements.yamlYamlEditor, elements.yamlYamlScroll, null);
-    }
+  // ============ Bookmark ============
+  function initBookmark() {
+    elements.bookmarkBtn.addEventListener("click", addBookmark);
+  }
 
-    function showYamlError(which, message) {
-        elements.yamlErrorYaml.hidden = false;
-        elements.yamlErrorYaml.textContent = message;
-    }
+  function addBookmark() {
+    const title = "JSON-Viewer.Ru — Online JSON Editor";
+    const url = window.location.href;
 
-    function hideYamlError() {
-        elements.yamlErrorYaml.hidden = true;
-        elements.yamlErrorYaml.textContent = '';
-        yamlYamlErrorLine = null;
-    }
-
-    function copyYamlOutput() {
-        const text = elements.yamlYamlEditor.value;
-        if (!text.trim()) {
-            showToast('Nothing to copy', 'error');
-            return;
-        }
-        navigator.clipboard.writeText(text)
-            .then(() => showToast('YAML copied to clipboard', 'success'))
-            .catch(() => showToast('Failed to copy', 'error'));
-    }
-
-    function downloadYaml() {
-        const text = elements.yamlYamlEditor.value;
-        if (!text.trim()) {
-            showToast('Nothing to download', 'error');
-            return;
-        }
-        const blob = new Blob([text], { type: 'application/x-yaml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'data.yaml';
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('YAML downloaded', 'success');
-    }
-
-    function uploadYamlFile(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            elements.yamlYamlEditor.value = e.target.result;
-            hideYamlError('yaml');
-            refreshYamlEditor('yaml');
-            applyYamlToDocument();
-            showToast('YAML loaded from ' + file.name, 'success');
-        };
-        reader.onerror = () => showToast('Failed to read file', 'error');
-        reader.readAsText(file);
-        event.target.value = '';
-    }
-
-    function highlightYaml(code) {
-        const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        function findInlineComment(s) {
-            let depth = 0;
-            for (let k = 0; k < s.length; k++) {
-                const c = s[k];
-                if (c === '"') { while (++k < s.length && !(s[k] === '"' && s[k - 1] !== '\\')) {} continue; }
-                if (c === "'") { while (++k < s.length && s[k] !== "'") {} continue; }
-                if (c === '[' || c === '{') depth++;
-                else if (c === ']' || c === '}') depth--;
-                else if (c === '#' && k > 0 && /\s/.test(s[k - 1])) return k;
-            }
-            return -1;
-        }
-
-        function findKeyColonLite(s) {
-            let depth = 0;
-            for (let k = 0; k < s.length; k++) {
-                const c = s[k];
-                if (c === '"') { while (++k < s.length && !(s[k] === '"' && s[k - 1] !== '\\')) {} continue; }
-                if (c === "'") { while (++k < s.length && s[k] !== "'") {} continue; }
-                if (c === '[' || c === '{') depth++;
-                else if (c === ']' || c === '}') depth--;
-                else if (c === ':' && depth === 0 && (s[k + 1] === undefined || s[k + 1] === ' ')) return k;
-            }
-            return -1;
-        }
-
-        function highlightInline(escaped) {
-            const strs = [];
-            // Encode placeholder index with letters (A-J) so the number/bracket
-            // passes below cannot corrupt it; restore strings last.
-            const enc = (n) => String(n).replace(/\d/g, (d) => String.fromCharCode(65 + (+d)));
-            const dec = (z) => z.replace(/[A-J]/g, (c) => String(c.charCodeAt(0) - 65));
-            escaped = escaped.replace(/"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'/g, (m) => {
-                strs.push(m);
-                return '\u0001' + enc(strs.length - 1) + '\u0001';
-            });
-            escaped = escaped.replace(/\b(true|false|True|False|TRUE|FALSE)\b/g, '<span class="boolean">$1</span>');
-            escaped = escaped.replace(/(^|[\s,\[{])(null|Null|NULL|~)(?=[\s,\]}]|$)/g, '$1<span class="null">$2</span>');
-            escaped = escaped.replace(/-?\b\d+\.?\d*(?:[eE][+-]?\d+)?\b/g, (m) => '<span class="number">' + m + '</span>');
-            escaped = escaped.replace(/([\[\]{}])/g, '<span class="bracket">$1</span>');
-            escaped = escaped.replace(/\u0001([A-J]+)\u0001/g, (_, idx) => '<span class="string">' + strs[+dec(idx)] + '</span>');
-            return escaped;
-        }
-
-        function highlightValue(s) {
-            const lead = s.match(/^(\s*)/)[1];
-            let v = s.slice(lead.length);
-            if (v === '') return lead;
-            let out = lead;
-            const am = v.match(/^[&*]\S+/);
-            if (am) {
-                out += '<span class="anchor">' + esc(am[0]) + '</span>';
-                v = v.slice(am[0].length);
-                if (v === '') return out;
-                const sp = v.match(/^(\s+)/);
-                if (sp) { out += sp[1]; v = v.slice(sp[1].length); }
-                if (v === '') return out;
-            }
-            const bm = v.match(/^[|>][+-]?\d*/);
-            if (bm && (v === bm[0] || /^\s/.test(v.slice(bm[0].length)))) {
-                return out + '<span class="bracket">' + esc(bm[0]) + '</span>' + esc(v.slice(bm[0].length));
-            }
-            return out + highlightInline(esc(v));
-        }
-
-        return code.split('\n').map((line) => {
-            const indent = line.match(/^(\s*)/)[1];
-            let rest = line.slice(indent.length);
-            if (rest === '') return indent;
-            if (rest[0] === '#') return indent + '<span class="comment">' + esc(rest) + '</span>';
-            if (rest === '---' || rest === '...') return indent + '<span class="bracket">' + esc(rest) + '</span>';
-            let prefix = indent;
-            let m;
-            while ((m = rest.match(/^-(\s+|$)/))) {
-                prefix += '<span class="bracket">-</span>' + m[1];
-                rest = rest.slice(m[0].length);
-                if (rest === '') return prefix;
-            }
-            let comment = '';
-            const ci = findInlineComment(rest);
-            if (ci !== -1) { comment = rest.slice(ci); rest = rest.slice(0, ci); }
-            let out = prefix;
-            const colon = findKeyColonLite(rest);
-            if (colon !== -1) {
-                const key = rest.slice(0, colon);
-                const after = rest.slice(colon + 1);
-                const keyLead = key.match(/^(\s*)/)[1];
-                const keyName = key.slice(keyLead.length);
-                out += keyLead + '<span class="key">' + esc(keyName) + '</span>:';
-                out += highlightValue(after);
-            } else {
-                out += highlightValue(rest);
-            }
-            if (comment) out += '<span class="comment">' + esc(comment) + '</span>';
-            return out;
-        }).join('\n');
-    }
-
-    // ============ Bookmark ============
-    function initBookmark() {
-        elements.bookmarkBtn.addEventListener('click', addBookmark);
-    }
-
-    function addBookmark() {
-        const title = 'JSON-Viewer.Ru — Online JSON Editor';
-        const url = window.location.href;
-        
-        // Try different methods for different browsers
-        if (window.sidebar && window.sidebar.addPanel) {
-            // Firefox <23
-            window.sidebar.addPanel(title, url, '');
-        } else if (window.external && ('AddFavorite' in window.external)) {
-            // IE
-            window.external.AddFavorite(url, title);
-        } else {
-            // Modern browsers - show instruction
-            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-            const shortcut = isMac ? 'Cmd+D' : 'Ctrl+D';
-            showToast(`Press ${shortcut} to bookmark this page`, 'success');
-        }
-    }
-
-    // ============ About Modal ============
-    function initAbout() {
-        elements.aboutBtn.addEventListener('click', openAbout);
-        elements.aboutClose.addEventListener('click', closeAbout);
-        elements.aboutModal.addEventListener('click', (e) => {
-            if (e.target === elements.aboutModal) {
-                closeAbout();
-            }
-        });
-        
-        // Close on Escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && elements.aboutModal.classList.contains('active')) {
-                closeAbout();
-            }
-        });
-    }
-
-    function openAbout() {
-        elements.aboutModal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
-
-    function closeAbout() {
-        elements.aboutModal.classList.remove('active');
-        document.body.style.overflow = '';
-    }
-
-    // ============ Theme ============
-    function initTheme() {
-        elements.themeToggle.addEventListener('click', toggleTheme);
-        
-        // Load saved theme or detect system preference
-        const savedTheme = localStorage.getItem(THEME_KEY);
-        
-        if (savedTheme) {
-            setTheme(savedTheme);
-        } else {
-            // Auto-detect system preference
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            setTheme(prefersDark ? 'dark' : 'light');
-        }
-        
-        // Listen for system theme changes
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-            // Only auto-switch if user hasn't manually set a theme
-            if (!localStorage.getItem(THEME_KEY)) {
-                setTheme(e.matches ? 'dark' : 'light');
-            }
-        });
-    }
-
-    function toggleTheme() {
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        setTheme(newTheme);
-        localStorage.setItem(THEME_KEY, newTheme);
-    }
-
-    function setTheme(theme) {
-        if (theme === 'dark') {
-            document.documentElement.setAttribute('data-theme', 'dark');
-            elements.themeIcon.textContent = 'light_mode';
-        } else {
-            document.documentElement.removeAttribute('data-theme');
-            elements.themeIcon.textContent = 'dark_mode';
-        }
-    }
-
-    // ============ Utilities ============
-    function escapeHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    }
-
-    function showToast(message, type = 'info') {
-        const toast = elements.toast;
-        const icon = toast.querySelector('.toast-icon');
-        const msg = toast.querySelector('.toast-message');
-
-        toast.className = 'toast ' + type;
-        icon.textContent = type === 'success' ? 'check_circle' : 'error';
-        msg.textContent = message;
-
-        toast.classList.add('show');
-
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, 3000);
-    }
-
-    // ============ Initialize ============
-    function init() {
-        initEditor();
-        initTreeViewer();
-        initSchema();
-        initBson();
-        initMsgpack();
-        initCbor();
-        initCompare();
-        initYaml();
-        initBookmark();
-        initAbout();
-        initTheme();
-        initSplitters();
-        initDrawers();
-        initWrap();
-        initShortcuts();
-
-        // Try to load from localStorage first
-        const savedContent = loadFromStorage();
-        
-        if (savedContent) {
-            elements.editor.value = savedContent;
-        } else {
-            // Sample JSON for demo
-            const sampleJson = {
-                "name": "JSON Editor",
-                "version": "1.0.0",
-                "features": ["syntax highlighting", "formatting", "tree view"],
-                "settings": {
-                    "theme": "light",
-                    "autoFormat": true,
-                    "tabSize": 2
-                },
-                "enabled": true,
-                "count": 42,
-                "nullable": null
-            };
-            elements.editor.value = JSON.stringify(sampleJson, null, 2);
-        }
-
-        updateLineNumbers();
-        updateSyntaxHighlight();
-        updateCursorStatus();
-        validateJson();
-
-        // Mode comes from the URL hash, so a deep link lands in the right place
-        initModes();
-    }
-
-    // Run on DOM ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+    // Try different methods for different browsers
+    if (window.sidebar && window.sidebar.addPanel) {
+      // Firefox <23
+      window.sidebar.addPanel(title, url, "");
+    } else if (window.external && "AddFavorite" in window.external) {
+      // IE
+      window.external.AddFavorite(url, title);
     } else {
-        init();
+      // Modern browsers - show instruction
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const shortcut = isMac ? "Cmd+D" : "Ctrl+D";
+      showToast(`Press ${shortcut} to bookmark this page`, "success");
     }
-})();
+  }
 
+  // ============ About Modal ============
+  function initAbout() {
+    elements.aboutBtn.addEventListener("click", openAbout);
+    elements.aboutClose.addEventListener("click", closeAbout);
+    elements.aboutModal.addEventListener("click", (e) => {
+      if (e.target === elements.aboutModal) {
+        closeAbout();
+      }
+    });
+
+    // Close on Escape key
+    document.addEventListener("keydown", (e) => {
+      if (
+        e.key === "Escape" &&
+        elements.aboutModal.classList.contains("active")
+      ) {
+        closeAbout();
+      }
+    });
+  }
+
+  function openAbout() {
+    elements.aboutModal.classList.add("active");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeAbout() {
+    elements.aboutModal.classList.remove("active");
+    document.body.style.overflow = "";
+  }
+
+  // ============ Theme ============
+  function initTheme() {
+    elements.themeToggle.addEventListener("click", toggleTheme);
+
+    // Load saved theme or detect system preference
+    let savedTheme;
+    try {
+      savedTheme = localStorage.getItem(THEME_KEY);
+    } catch {}
+
+    if (savedTheme) {
+      setTheme(savedTheme);
+    } else {
+      // Auto-detect system preference
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)",
+      ).matches;
+      setTheme(prefersDark ? "dark" : "light");
+    }
+
+    // Listen for system theme changes
+    window
+      .matchMedia("(prefers-color-scheme: dark)")
+      .addEventListener("change", (e) => {
+        // Only auto-switch if user hasn't manually set a theme
+        if (!savedTheme) {
+          setTheme(e.matches ? "dark" : "light");
+        }
+      });
+  }
+
+  function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute("data-theme");
+    const newTheme = currentTheme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    try {
+      localStorage.setItem(THEME_KEY, newTheme);
+    } catch {}
+  }
+
+  function setTheme(theme) {
+    if (theme === "dark") {
+      document.documentElement.setAttribute("data-theme", "dark");
+      elements.themeIcon.textContent = "light_mode";
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+      elements.themeIcon.textContent = "dark_mode";
+    }
+  }
+
+  function previewSubtree(value, depth = 0) {
+    if (depth > 3) return "…";
+    if (typeof value === "string")
+      return (
+        stringifyJson(value.slice(0, 240)) + (value.length > 240 ? "…" : "")
+      );
+    if (!value || typeof value !== "object" || isLosslessNumber(value))
+      return stringifyJson(value)?.slice(0, 240);
+    const keys = Object.keys(value),
+      array = Array.isArray(value);
+    return (
+      (array ? "[" : "{") +
+      keys
+        .slice(0, 6)
+        .map(
+          (k) =>
+            (array ? "" : stringifyJson(k) + ": ") +
+            previewSubtree(value[k], depth + 1),
+        )
+        .join(", ") +
+      (keys.length > 6 ? ", …" : "") +
+      (array ? "]" : "}")
+    );
+  }
+  // ============ Utilities ============
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function showToast(message, type = "info") {
+    const toast = elements.toast;
+    const icon = toast.querySelector(".toast-icon");
+    const msg = toast.querySelector(".toast-message");
+
+    toast.className = "toast " + type;
+    icon.textContent = type === "success" ? "check_circle" : "error";
+    msg.textContent = message;
+
+    toast.classList.add("show");
+
+    setTimeout(() => {
+      toast.classList.remove("show");
+    }, 3000);
+  }
+
+  // ============ Initialize ============
+  async function init() {
+    for (const key of [
+      "editor",
+      "schemaEditor",
+      "compareJsonA",
+      "compareJsonB",
+      "yamlYamlEditor",
+    ])
+      elements[key] = new DocumentEditor(elements[key]);
+    treeView = new JsonTree(elements.treeContent, selectNode);
+    initEditor();
+    initTreeViewer();
+    initSchema();
+    initBson();
+    initMsgpack();
+    initCbor();
+    initCompare();
+    initYaml();
+    initBookmark();
+    initAbout();
+    initTheme();
+    initSplitters();
+    initDrawers();
+    initWrap();
+    initShortcuts();
+
+    // Try to load from localStorage first
+    const savedContent = loadFromStorage();
+
+    if (savedContent) {
+      elements.editor.value = savedContent;
+    } else {
+      // Sample JSON for demo
+      const sampleJson = {
+        name: "JSON Editor",
+        version: "1.0.0",
+        features: ["syntax highlighting", "formatting", "tree view"],
+        settings: {
+          theme: "light",
+          autoFormat: true,
+          tabSize: 2,
+        },
+        enabled: true,
+        count: 42,
+        nullable: null,
+      };
+      elements.editor.value = stringifyJson(sampleJson, null, 2);
+    }
+
+    initModes();
+    updateCursorStatus();
+    await validateJson();
+  }
+
+  // Run on DOM ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();

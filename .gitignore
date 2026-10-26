@@ -20,3 +20,6 @@
 
 # PHP
 *.cache
+
+# Local build dependencies
+node_modules/

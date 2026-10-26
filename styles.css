@@ -999,7 +999,7 @@ body.resizing * { cursor: inherit !important; }
 }
 
 /* ============================== Tree ============================== */
-.tree-node {
+.virtual-tree {
     font-family: var(--font-mono);
     font-size: 0.75rem;
     line-height: 1.45;
@@ -1798,3 +1798,17 @@ kbd {
 
     .modal { max-width: calc(100% - 1.5rem); }
 }
+
+/* The editor owns scrolling, selection, wrapping and viewport rendering. */
+.cm-host { overflow: hidden; }
+.cm-host .cm-editor { height: 100%; font-family: var(--font-mono); font-size: .75rem; background: var(--surface); color: var(--on-surface); }
+.cm-host .cm-scroller { overflow: auto; font-family: inherit; line-height: 1.5; }
+.cm-host .cm-gutters { background: var(--surface-sunken); color: var(--on-surface-faint); border-right: 1px solid var(--outline-variant); }
+.cm-host .cm-activeLine, .cm-host .cm-activeLineGutter { background: var(--surface-sunken); }
+.cm-host .cm-cursor { border-left-color: var(--primary); }
+.cm-host .cm-selectionBackground, .cm-host .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--primary) 25%, transparent); }
+.cm-host .cm-error-line { background: var(--error-soft); box-shadow: inset 2px 0 var(--error); }
+.virtual-tree { overflow: auto; padding: 0; position: relative; }
+.virtual-tree-row { height: 24px; box-sizing: border-box; white-space: nowrap; overflow: hidden; }
+.virtual-tree-row .tree-toggle { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; flex-shrink: 0; }
+.virtual-tree-row .tree-value { overflow: hidden; text-overflow: ellipsis; }

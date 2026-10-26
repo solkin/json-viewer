@@ -1,0 +1,35 @@
+{
+  "name": "json-viewer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "lint": "eslint .",
+    "check": "npm run lint && npm run build && npm test",
+    "format": "prettier --write app.js src scripts tests eslint.config.js",
+    "start": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/lang-json": "6.0.2",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/legacy-modes": "6.5.5",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.15",
+    "@lezer/highlight": "1.2.5",
+    "ajv": "8.18.0",
+    "ajv-formats": "3.0.1",
+    "bson": "7.3.3",
+    "cborg": "6.1.5",
+    "lossless-json": "4.3.3",
+    "msgpackr": "2.1.2",
+    "yaml": "2.8.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.10"
+  }
+}
